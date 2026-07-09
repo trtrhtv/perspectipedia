@@ -1,0 +1,36 @@
+// perspectipedia — מודל נתונים (v1)
+// SQLite לפשטות; מסלול קל ל-Postgres בהמשך.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Entry {
+  id        String   @id @default(cuid())
+  slug      String   @unique // נגזר מהנושא — מפתח לחיפוש וקישור
+  topic     String            // הנושא כפי שהוקלד ("בריאת העולם")
+  topicKind String            // meaning / mixed / empirical
+  lenses    Lens[]
+  createdAt DateTime @default(now())
+}
+
+model Lens {
+  id            String  @id @default(cuid())
+  entryId       String
+  entry         Entry   @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  name          String            // "יהדות דתית"
+  family        String            // religious / scientific / philosophical / political / cultural / historical
+  summary       String            // תמצית 1-2 משפטים
+  body          String            // גוף הערך מהעדשה הזו
+  grounding     String            // JSON string: [{ source, explanation }]  — "על מה זה מבוסס"
+  epistemicType String            // meaning-narrative / value-position / empirical-grounded / methodological-critique
+  confidence    String?           // סייג אופציונלי
+  order         Int               // סדר תצוגה
+
+  @@index([entryId])
+}

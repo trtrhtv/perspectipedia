@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    font-family: var(--font-hebrew), system-ui, sans-serif;
+  }
+  ::selection {
+    background: #e0e7ff;
+  }
+}
+
+/* גלילה עדינה בתוך גוף הערך */
+.prose-body p {
+  margin-bottom: 0.85rem;
+  line-height: 1.85;
+}
+.prose-body p:last-child {
+  margin-bottom: 0;
+}
