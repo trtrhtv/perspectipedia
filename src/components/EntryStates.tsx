@@ -46,16 +46,25 @@ export function RefusedState({ reason }: { reason: string }) {
 }
 
 export function ErrorState({ error }: { error: { message: string; code?: string } }) {
+  // מצב read-only (PLAN 2.3): בלי מפתח, יצירה סגורה — מסר מוצרי, לא שגיאה טכנית.
+  if (error.code === "no_api_key") {
+    return (
+      <div className="mt-10 rounded-2xl border border-line bg-white p-6">
+        <p className="font-medium text-ink">יצירת ערכים חדשים תיפתח בקרוב</p>
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          בשלב הזה אפשר לקרוא את הערכים שכבר בספרייה. יצירת ערכים חדשים תיפתח כשנשלים את
+          בדיקות האיכות וההוגנות.
+        </p>
+        <Link href="/library" className="mt-4 inline-block text-sm text-accent hover:underline">
+          ← לספריית הערכים
+        </Link>
+      </div>
+    );
+  }
   return (
     <div className="mt-10 rounded-2xl border border-amber-200 bg-amber-50 p-6">
       <p className="font-medium text-amber-900">לא הצלחנו לבנות את הערך</p>
       <p className="mt-1 text-sm text-amber-800">{error.message}</p>
-      {error.code === "no_api_key" && (
-        <p className="mt-3 text-xs text-amber-700">
-          כדי לאפשר יצירת ערכים, הוסיפו <code className="rounded bg-amber-100 px-1">ANTHROPIC_API_KEY</code>{" "}
-          לקובץ <code className="rounded bg-amber-100 px-1">.env.local</code> והפעילו מחדש את השרת.
-        </p>
-      )}
       <Link href="/" className="mt-4 inline-block text-sm text-accent hover:underline">
         ← חזרה לדף הבית
       </Link>
