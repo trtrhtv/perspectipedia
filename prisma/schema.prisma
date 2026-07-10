@@ -1,12 +1,12 @@
-// perspectipedia — מודל נתונים (v1)
-// SQLite לפשטות; מסלול קל ל-Postgres בהמשך.
+// perspectipedia — מודל נתונים
+// Postgres (Neon בפרודקשן, מקומי/branch בפיתוח) — PLAN 2.1.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -70,7 +70,7 @@ model Lens {
   family        String            // religious / scientific / philosophical / political / cultural / historical
   summary       String            // תמצית 1-2 משפטים
   body          String            // גוף הערך מהעדשה הזו
-  grounding     String            // JSON string: [{ source, explanation }]  — "על מה זה מבוסס"
+  grounding     Json              // [{ source, explanation, url? }] — "על מה זה מבוסס"
   epistemicType String            // meaning-narrative / value-position / empirical-grounded / methodological-critique
   confidence    String?           // סייג אופציונלי
   order         Int               // סדר תצוגה

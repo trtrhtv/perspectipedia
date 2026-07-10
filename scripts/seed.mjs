@@ -99,7 +99,7 @@ async function main() {
           family: l.family,
           summary: l.summary,
           body: l.body,
-          grounding: JSON.stringify(l.grounding),
+          grounding: l.grounding,
           epistemicType: l.epistemicType,
           confidence: l.confidence ?? null,
           order: i,

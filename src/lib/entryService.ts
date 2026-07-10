@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { generateEntry, MissingApiKeyError } from "./claude";
 import { topicToSlug, normalizeTopic, heVariantSlug } from "./slug";
@@ -85,7 +86,7 @@ export async function getEntryResultBySlug(slug: string): Promise<EntryResult | 
         family: l.family as Lens["family"],
         summary: l.summary,
         body: l.body,
-        grounding: JSON.parse(l.grounding) as Lens["grounding"],
+        grounding: l.grounding as unknown as Lens["grounding"],
         epistemicType: l.epistemicType as Lens["epistemicType"],
         confidence: l.confidence ?? undefined,
       })),
@@ -318,7 +319,8 @@ export async function processPendingEntry(slug: string): Promise<void> {
               family: l.family,
               summary: l.summary,
               body: l.body,
-              grounding: JSON.stringify(l.grounding),
+              // Prisma Json input — מערך טיפוסי דורש המרה מפורשת
+              grounding: l.grounding as unknown as Prisma.InputJsonValue,
               epistemicType: l.epistemicType,
               confidence: l.confidence,
               order: i,
