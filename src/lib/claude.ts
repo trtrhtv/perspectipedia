@@ -1,11 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ENTRY_JSON_SCHEMA } from "./schema";
-import { SYSTEM_PROMPT, buildUserPrompt } from "./prompts";
+import { SYSTEM_PROMPT, PROMPT_VERSION, buildUserPrompt } from "./prompts";
 import type { Entry, Lens } from "./types";
 import { topicToSlug } from "./slug";
 
 // מודל: Claude Opus 4.8 — הכי חזק, קריטי לניואנס ולייצוג מכבד.
 const MODEL = "claude-opus-4-8";
+const MIN_LENSES = 2; // מבחן הביסוס: חייבות לשרוד לפחות 2 עדשות מבוססות
+const MIN_BODY_CHARS = 40; // גוף עדשה קצר מדי = לא ערך אמיתי
+const MAX_ATTEMPTS = 2; // retry אחד על כשל parse/transient
 
 export class MissingApiKeyError extends Error {
   constructor() {
@@ -13,6 +16,18 @@ export class MissingApiKeyError extends Error {
     this.name = "MissingApiKeyError";
   }
 }
+
+export interface GenerationMeta {
+  promptVersion: string;
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
+// תוצאה מובחנת: או ערך תקין, או סירוב מכובד (נושא מחוץ לתחום).
+export type GenerationResult =
+  | { refused: false; entry: Entry; meta: GenerationMeta }
+  | { refused: true; reason: string };
 
 function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -22,7 +37,6 @@ function getClient(): Anthropic {
   return new Anthropic({ apiKey });
 }
 
-// מבנה הפלט הגולמי מהמודל (snake_case, כמו הסכמה)
 interface RawLens {
   name: string;
   family: Lens["family"];
@@ -35,12 +49,16 @@ interface RawLens {
 interface RawEntry {
   topic: string;
   topic_kind: Entry["topicKind"];
+  refused: boolean;
+  refusal_reason?: string;
   lenses: RawLens[];
 }
 
-// אכיפת מבחן הביסוס: עדשה עוברת רק אם יש לה grounding אמיתי.
+// אכיפת מבחן הביסוס: עדשה עוברת רק אם יש לה grounding אמיתי וגוף ממשי.
 function passesGroundingBar(lens: RawLens): boolean {
   return (
+    typeof lens.body === "string" &&
+    lens.body.trim().length >= MIN_BODY_CHARS &&
     Array.isArray(lens.grounding) &&
     lens.grounding.length > 0 &&
     lens.grounding.every(
@@ -50,20 +68,18 @@ function passesGroundingBar(lens: RawLens): boolean {
         g.source.trim().length > 0 &&
         typeof g.explanation === "string" &&
         g.explanation.trim().length > 0
-    ) &&
-    lens.body?.trim().length > 0
+    )
   );
 }
 
-export async function generateEntry(topic: string): Promise<Entry> {
+// קריאה אחת למודל + פענוח. זורק על stop reasons בעייתיים כדי לאפשר retry.
+async function callModel(topic: string): Promise<{ raw: RawEntry; meta: GenerationMeta }> {
   const client = getClient();
 
-  // streaming כדי להימנע מ-timeout על יצירות ארוכות (adaptive thinking + high effort).
   const stream = client.messages.stream({
     model: MODEL,
     max_tokens: 16000,
     thinking: { type: "adaptive" },
-    // effort גבוה לאיכות וניואנס; structured output מבטיח את המבנה.
     output_config: {
       effort: "high",
       format: {
@@ -77,39 +93,84 @@ export async function generateEntry(topic: string): Promise<Entry> {
 
   const message = await stream.finalMessage();
 
-  // הפלט המובנה מגיע כבלוק טקסט שהוא JSON תקין.
+  const meta: GenerationMeta = {
+    promptVersion: PROMPT_VERSION,
+    model: MODEL,
+    inputTokens: message.usage?.input_tokens ?? null,
+    outputTokens: message.usage?.output_tokens ?? null,
+  };
+
+  // טיפול מפורש ב-stop reasons — אחרת נופלים לשגיאה מבלבלת.
+  if (message.stop_reason === "max_tokens") {
+    throw new Error("truncated: הפלט נקטע (max_tokens).");
+  }
+
   const textBlock = message.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") {
-    throw new Error("המודל לא החזיר תוכן טקסט.");
+    throw new Error("no_text: המודל לא החזיר תוכן טקסט.");
   }
 
   let raw: RawEntry;
   try {
     raw = JSON.parse(textBlock.text) as RawEntry;
   } catch {
-    throw new Error("המודל החזיר פלט שאינו JSON תקין.");
+    throw new Error("parse: המודל החזיר פלט שאינו JSON תקין.");
   }
 
-  // אכיפת מבחן הביסוס — סינון עדשות ללא ביסוס אמיתי.
-  const validLenses = (raw.lenses ?? []).filter(passesGroundingBar);
-  if (validLenses.length === 0) {
-    throw new Error("לא נוצרו עדשות מבוססות לנושא הזה.");
+  return { raw, meta };
+}
+
+export async function generateEntry(topic: string): Promise<GenerationResult> {
+  let lastErr: unknown;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const { raw, meta } = await callModel(topic);
+
+      // סירוב מכובד — נושא מחוץ לתחום המוצר.
+      if (raw.refused) {
+        return {
+          refused: true,
+          reason:
+            raw.refusal_reason?.trim() ||
+            "הנושא הזה מחוץ לתחום של perspectipedia.",
+        };
+      }
+
+      // אכיפת מבחן הביסוס — סינון עדשות ללא ביסוס אמיתי.
+      const valid = (raw.lenses ?? []).filter(passesGroundingBar);
+      if (valid.length < MIN_LENSES) {
+        // לא מספיק עדשות מבוססות — שווה ניסיון נוסף.
+        throw new Error("too_few_lenses: לא נוצרו מספיק עדשות מבוססות.");
+      }
+
+      const lenses: Lens[] = valid.map((l) => ({
+        name: l.name,
+        family: l.family,
+        summary: l.summary,
+        body: l.body,
+        grounding: l.grounding,
+        epistemicType: l.epistemic_type,
+        confidence: l.confidence,
+      }));
+
+      return {
+        refused: false,
+        meta,
+        entry: {
+          slug: topicToSlug(topic),
+          topic: raw.topic || topic,
+          topicKind: raw.topic_kind,
+          lenses,
+        },
+      };
+    } catch (err) {
+      lastErr = err;
+      // MissingApiKey לא ניתן לתיקון ב-retry — זרוק מיד.
+      if (err instanceof MissingApiKeyError) throw err;
+      if (attempt < MAX_ATTEMPTS) continue;
+    }
   }
 
-  const lenses: Lens[] = validLenses.map((l) => ({
-    name: l.name,
-    family: l.family,
-    summary: l.summary,
-    body: l.body,
-    grounding: l.grounding,
-    epistemicType: l.epistemic_type,
-    confidence: l.confidence,
-  }));
-
-  return {
-    slug: topicToSlug(topic),
-    topic: raw.topic || topic,
-    topicKind: raw.topic_kind,
-    lenses,
-  };
+  throw lastErr instanceof Error ? lastErr : new Error("יצירת הערך נכשלה.");
 }

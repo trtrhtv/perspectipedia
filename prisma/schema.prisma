@@ -11,12 +11,23 @@ datasource db {
 }
 
 model Entry {
-  id        String   @id @default(cuid())
-  slug      String   @unique // נגזר מהנושא — מפתח לחיפוש וקישור
-  topic     String            // הנושא כפי שהוקלד ("בריאת העולם")
-  topicKind String            // meaning / mixed / empirical
-  lenses    Lens[]
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  slug          String   @unique // נגזר מהנושא — מפתח לחיפוש וקישור
+  topic         String            // הנושא כפי שהוקלד ("בריאת העולם")
+  topicKind     String            // meaning / mixed / empirical
+  status        String   @default("published") // published / refused / removed
+  refusalReason String?           // אם status=refused — הסיבה (לשנאה/אדם פרטי/נזק)
+  lenses        Lens[]
+
+  // provenance — זול עכשיו, קריטי אחר כך (עריכה היברידית, מעקב איכות)
+  promptVersion String   @default("v1")
+  model         String   @default("claude-opus-4-8")
+  inputTokens   Int?              // usage — לניהול עלויות
+  outputTokens  Int?
+
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model Lens {
@@ -31,6 +42,7 @@ model Lens {
   epistemicType String            // meaning-narrative / value-position / empirical-grounded / methodological-critique
   confidence    String?           // סייג אופציונלי
   order         Int               // סדר תצוגה
+  editedByHuman Boolean @default(false) // תשתית לצעד ההיברידי (v2)
 
   @@index([entryId])
 }

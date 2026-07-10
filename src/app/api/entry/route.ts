@@ -22,8 +22,22 @@ export async function POST(request: Request) {
   }
 
   try {
-    const entry = await getOrCreateEntry(topic);
-    return NextResponse.json({ entry });
+    const result = await getOrCreateEntry(topic);
+
+    switch (result.kind) {
+      case "entry":
+        return NextResponse.json({ entry: result.entry });
+      case "refused":
+        return NextResponse.json({ refused: true, reason: result.reason });
+      case "capped":
+        return NextResponse.json(
+          {
+            error: "הגענו למכסת הערכים החדשים להיום. נסו שוב מחר.",
+            code: "daily_cap",
+          },
+          { status: 429 }
+        );
+    }
   } catch (err) {
     if (err instanceof MissingApiKeyError) {
       return NextResponse.json({ error: err.message, code: "no_api_key" }, { status: 503 });

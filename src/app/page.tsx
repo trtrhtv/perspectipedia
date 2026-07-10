@@ -37,6 +37,15 @@ export default function HomePage() {
         </div>
       </section>
 
+      <div className="mt-8 text-center">
+        <Link
+          href="/library"
+          className="text-sm text-muted underline-offset-4 transition hover:text-accent hover:underline"
+        >
+          עיון בספריית הערכים ←
+        </Link>
+      </div>
+
       <footer className="mt-16 text-center text-xs text-muted/70">
         כל עדשה מוצגת עם &quot;על מה זה מבוסס&quot;. עמדות ללא ביסוס אינן נכללות.
       </footer>

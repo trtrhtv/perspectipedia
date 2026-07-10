@@ -8,12 +8,13 @@ import LensSwitcher from "./LensSwitcher";
 import LensView from "./LensView";
 import CompareView from "./CompareView";
 
-type Status = "loading" | "ready" | "error";
+type Status = "loading" | "ready" | "error" | "refused";
 
 export default function EntryView({ topic }: { topic: string }) {
   const [status, setStatus] = useState<Status>("loading");
   const [entry, setEntry] = useState<Entry | null>(null);
   const [error, setError] = useState<{ message: string; code?: string } | null>(null);
+  const [refusalReason, setRefusalReason] = useState<string>("");
 
   const [active, setActive] = useState(0);
   const [compare, setCompare] = useState(false);
@@ -36,6 +37,11 @@ export default function EntryView({ topic }: { topic: string }) {
         if (!res.ok) {
           setError({ message: data.error ?? "אירעה שגיאה.", code: data.code });
           setStatus("error");
+          return;
+        }
+        if (data.refused) {
+          setRefusalReason(data.reason ?? "הנושא הזה מחוץ לתחום של perspectipedia.");
+          setStatus("refused");
           return;
         }
         setEntry(data.entry as Entry);
@@ -65,6 +71,7 @@ export default function EntryView({ topic }: { topic: string }) {
 
       {status === "loading" && <LoadingState />}
       {status === "error" && error && <ErrorState error={error} />}
+      {status === "refused" && <RefusedState reason={refusalReason} />}
 
       {status === "ready" && entry && (
         <>
@@ -120,6 +127,22 @@ function LoadingState() {
       <p className="max-w-sm text-xs text-muted/70">
         זו הפעם הראשונה שהנושא הזה נחקר, אז אנחנו מייצרים אותו עכשיו. בפעם הבאה הוא ייטען מיד.
       </p>
+    </div>
+  );
+}
+
+function RefusedState({ reason }: { reason: string }) {
+  return (
+    <div className="mt-10 rounded-2xl border border-line bg-white p-6">
+      <p className="font-medium text-ink">הנושא הזה מחוץ לתחום שלנו</p>
+      <p className="mt-2 text-sm leading-relaxed text-muted">{reason}</p>
+      <p className="mt-3 text-xs text-muted/80">
+        perspectipedia מציגה נקודות מבט מבוססות על שאלות של משמעות, ערכים ופרשנות — לא ערכים על
+        אנשים פרטיים, ולא במה להסתה או לתוכן מזיק.
+      </p>
+      <Link href="/" className="mt-4 inline-block text-sm text-accent hover:underline">
+        ← חזרה לדף הבית
+      </Link>
     </div>
   );
 }

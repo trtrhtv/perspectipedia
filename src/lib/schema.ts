@@ -6,6 +6,16 @@ export const ENTRY_JSON_SCHEMA = {
   type: "object",
   properties: {
     topic: { type: "string", description: "הנושא" },
+    // מנגנון סירוב — למודל חייבת להיות "לא" חוקית. בלי זה הסכמה מכריחה אותו לייצר.
+    refused: {
+      type: "boolean",
+      description:
+        "true אם הנושא מחוץ לתחום המוצר: הסתה/שנאה, ערך על אדם פרטי חי, או תוכן מזיק אופרטיבית. אחרת false.",
+    },
+    refusal_reason: {
+      type: "string",
+      description: "אם refused=true — הסבר קצר ומכובד למשתמש למה הנושא אינו מתאים.",
+    },
     topic_kind: {
       type: "string",
       enum: ["meaning", "mixed", "empirical"],
@@ -82,6 +92,6 @@ export const ENTRY_JSON_SCHEMA = {
       },
     },
   },
-  required: ["topic", "topic_kind", "lenses"],
+  required: ["topic", "topic_kind", "refused", "lenses"],
   additionalProperties: false,
 } as const;
