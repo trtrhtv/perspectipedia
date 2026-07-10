@@ -10,7 +10,9 @@
     "lint": "next lint",
     "db:push": "prisma db push",
     "postinstall": "prisma generate",
-    "db:migrate": "prisma migrate deploy"
+    "db:migrate": "prisma migrate deploy",
+    "eval:generate": "node --experimental-strip-types scripts/eval/generate.mjs",
+    "eval:judge": "node scripts/eval/judge.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

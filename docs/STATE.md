@@ -32,7 +32,15 @@ rawOutput, costUsd, לוג) · 1.1 (rate limit פר-IP) · 1.3+1.4 (admin+דיו
 Postgres 16 חי כולל חזרה גנרלית על DB טרי) + `DEPLOY.md` מלא + מצב read-only מוצרי
 ("יצירה תיפתח בקרוב"). **מה שנשאר ב-M2 דורש את המפעיל:** חשבונות Neon/Vercel, מיזוג
 ל-main, ופריסה לפי `DEPLOY.md`.
-**הבא בקוד: M3** — הכנות eval + UI היעד (PLAN 3.1–3.4, 4.1–4.4) — הכול בלי מפתח.
+**M3 ("eval-ready + UI היעד") — הושלם:** מסמך פסיקה (`docs/GROUNDING_CASES.md`, ממתין
+לאישור המייסד) + טיוטת חוקה v3 (`docs/PROMPT_V3_DRAFT.md`) + BYOK נסגר (D2) + תיקוני
+audit (body במבט הגלוי, ניסוח כן ב-method) + באנר אמפירי + badges אפיסטמיים + crux +
+badges ביסוס מקושר + `scripts/check-links.mjs` + תשתית eval מלאה (`eval/topics.json` —
+36 נושאים, `eval/rubric.md`, `scripts/eval/generate.mjs` Batch+dry-run, `judge.mjs` עם
+החלפת-תוויות, מעבר-שפה דטרמיניסטי, ושופט חוצה-משפחות). dry-run עובר.
+**הבא: M4 — חסום על מפתח.** ביום שיש `ANTHROPIC_API_KEY`: (1) לאשר את GROUNDING_CASES;
+(2) `npm run eval:generate` (baseline על v2); (3) `npm run eval:judge`; (4) נחיתת v3 לפי
+הצ'קליסט ב-PROMPT_V3_DRAFT; (5) הדלקת דגלים. במקביל אפשר: פריסת read-only (DEPLOY.md).
 
 ## החסם היחיד
 **`ANTHROPIC_API_KEY`** — בלעדיו אי אפשר לייצר ערכים אמיתיים, להריץ eval, להפעיל את המבקר, או לפרוס.
