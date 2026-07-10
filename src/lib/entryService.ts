@@ -2,6 +2,7 @@ import { prisma } from "./db";
 import { generateEntry } from "./claude";
 import { topicToSlug, normalizeTopic, heVariantSlug } from "./slug";
 import { limitCreate } from "./ratelimit";
+import { isGateEnabled, runGate } from "./gate";
 import type { Entry, Lens } from "./types";
 
 // מכסת יצירות יומית גלובלית — חוסמת abuse בנפח (ראו docs/ROADMAP.md §5).
@@ -159,7 +160,23 @@ export async function getOrCreateEntry(
     return { kind: "capped" };
   }
 
-  // 3. generate — מנוע ה-LLM (מחזיר ערך או סירוב). הנושא המנורמל בלבד.
+  // 4. שער-נושא (Haiku, flag-gated) — סירוב זול לפני שקריאת Opus יקרה יוצאת (PLAN 1.2).
+  if (isGateEnabled()) {
+    const gate = await runGate(cleanTopic);
+    if (gate?.decision === "refuse") {
+      const reason = gate.reason ?? "הנושא הזה מחוץ לתחום של perspectipedia.";
+      // סירוב-שער נשמר כשורת refused — blocklist זול, אותו מנגנון קיים.
+      await prisma.entry
+        .create({
+          data: { slug, topic: cleanTopic, topicKind: "meaning", status: "refused", refusalReason: reason },
+        })
+        .catch(() => null); // מרוץ על unique — לא קריטי
+      logGeneration({ slug, finalStatus: "refused", gate: "refuse", costUsd: gate.costUsd });
+      return { kind: "refused", reason };
+    }
+  }
+
+  // 5. generate — מנוע ה-LLM (מחזיר ערך או סירוב). הנושא המנורמל בלבד.
   const result = await generateEntry(cleanTopic);
 
   // 4. persist — נצבר לספרייה. מטפל במרוץ (אם נוצר במקביל).
