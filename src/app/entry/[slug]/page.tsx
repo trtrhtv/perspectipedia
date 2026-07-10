@@ -16,8 +16,30 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { slug: raw } = await params;
   const slug = decodeURIComponent(raw);
   const result = await getEntryResultBySlug(slug);
-  const topic = result?.kind === "entry" ? result.entry.topic : slugToTopic(slug);
-  return { title: `${topic} — perspectipedia` };
+
+  // רק ערך מפורסם ראוי לאינדוקס. דפי "בנו את הערך"/pending/refused הם soft-404 —
+  // בלי noindex קרולרים יאנדקסו אינסוף כתובות (PRE_KEY 1.1).
+  if (result?.kind !== "entry") {
+    return {
+      title: `${slugToTopic(slug)} — perspectipedia`,
+      robots: { index: false, follow: false },
+    };
+  }
+
+  const entry = result.entry;
+  const description =
+    entry.crux ??
+    entry.lenses.map((l) => `${l.name}: ${l.summary}`).join(" · ").slice(0, 300);
+  return {
+    title: `${entry.topic} — perspectipedia`,
+    description,
+    openGraph: {
+      title: `${entry.topic} — perspectipedia`,
+      description,
+      type: "article",
+      locale: "he_IL",
+    },
+  };
 }
 
 export default async function EntryPage({ params }: Params) {

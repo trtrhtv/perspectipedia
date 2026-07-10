@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { listEntries } from "@/lib/entryService";
-import { topicToSlug } from "@/lib/slug";
 import { TOPIC_KIND_LABELS } from "@/lib/types";
 
 // דף הספרייה נטען דינמית — משקף את הערכים שנצברו.
@@ -41,7 +40,7 @@ export default async function LibraryPage() {
           {entries.map((e) => (
             <li key={e.slug}>
               <Link
-                href={`/entry/${encodeURIComponent(topicToSlug(e.topic))}?q=${encodeURIComponent(e.topic)}`}
+                href={`/entry/${encodeURIComponent(e.slug)}`}
                 className="block rounded-2xl border border-line bg-white p-5 transition hover:border-accent"
               >
                 <div className="mb-1 flex items-baseline justify-between gap-3">
