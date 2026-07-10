@@ -33,6 +33,8 @@ export default function CreateEntryFlow({
   const [entry, setEntry] = useState<Entry | null>(null);
   const [error, setError] = useState<{ message: string; code?: string } | null>(null);
   const [refusalReason, setRefusalReason] = useState("");
+  // בחירת עומק (D7): נשמרת עם הבקשה; נאכפת ביצירה מחוקה v3.
+  const [depth, setDepth] = useState<"summary" | "standard">("standard");
   const stopped = useRef(false);
 
   const poll = useCallback(async () => {
@@ -84,7 +86,7 @@ export default function CreateEntryFlow({
       const res = await fetch("/api/entry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic }),
+        body: JSON.stringify({ topic, depth }),
       });
       const data = await res.json();
       if (!res.ok && res.status !== 202) {
@@ -148,6 +150,23 @@ export default function CreateEntryFlow({
         עוד אין לנו ערך על &quot;{topic}&quot;. אפשר לבנות אותו עכשיו — ניצור אותו מכמה נקודות
         מבט מבוססות, וזה עשוי לקחת עד כמה דקות.
       </p>
+      <fieldset className="mt-4">
+        <legend className="mb-1.5 text-xs font-medium text-muted">רמת פירוט:</legend>
+        <div className="flex gap-2">
+          <label
+            className={`cursor-pointer rounded-full border px-3.5 py-1 text-xs font-medium transition ${depth === "standard" ? "border-accent bg-accent/10 text-accent" : "border-line bg-white text-muted hover:border-accent/50"}`}
+          >
+            <input type="radio" name="depth" value="standard" checked={depth === "standard"} onChange={() => setDepth("standard")} className="sr-only" />
+            סקירה מפורטת
+          </label>
+          <label
+            className={`cursor-pointer rounded-full border px-3.5 py-1 text-xs font-medium transition ${depth === "summary" ? "border-accent bg-accent/10 text-accent" : "border-line bg-white text-muted hover:border-accent/50"}`}
+          >
+            <input type="radio" name="depth" value="summary" checked={depth === "summary"} onChange={() => setDepth("summary")} className="sr-only" />
+            סיכום קצר
+          </label>
+        </div>
+      </fieldset>
       <div className="mt-4 flex items-center gap-4">
         <button
           onClick={create}

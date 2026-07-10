@@ -184,7 +184,7 @@ async function countGenerationsToday(): Promise<number> {
 // requestGeneration מחזיר מהר; הלקוח עוקב ב-polling על GET /api/entry/[slug].
 export async function getOrCreateEntry(
   topic: string,
-  opts: { ip?: string } = {}
+  opts: { ip?: string; depth?: "summary" | "standard" } = {}
 ): Promise<EntryResult> {
   const cleanTopic = normalizeTopic(topic);
   const slug = topicToSlug(cleanTopic);
@@ -253,6 +253,8 @@ export async function getOrCreateEntry(
         topic: cleanTopic,
         topicKind: "meaning", // placeholder — מתעדכן בסוף היצירה
         status: "pending",
+        // בחירת הקורא (D7): נשמרת עכשיו, נאכפת ביצירה מחוקה v3 (PLAN 4.7).
+        depth: opts.depth ?? "standard",
         generationStartedAt: new Date(),
         attemptCount: 1,
       },

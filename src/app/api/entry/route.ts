@@ -7,9 +7,12 @@ export const maxDuration = 300;
 
 export async function POST(request: Request) {
   let topic: string;
+  let depth: "summary" | "standard";
   try {
     const body = await request.json();
     topic = (body?.topic ?? "").toString().trim();
+    // בחירת עומק של הקורא (D7) — deep שמור ל-admin בלבד.
+    depth = body?.depth === "summary" ? "summary" : "standard";
   } catch {
     return NextResponse.json({ error: "בקשה לא תקינה." }, { status: 400 });
   }
@@ -28,7 +31,7 @@ export async function POST(request: Request) {
     "unknown";
 
   try {
-    const result = await getOrCreateEntry(topic, { ip });
+    const result = await getOrCreateEntry(topic, { ip, depth });
 
     switch (result.kind) {
       case "entry":

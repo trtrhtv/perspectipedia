@@ -20,6 +20,7 @@ model Entry {
   lastError     String?           // אם status=failed — השגיאה האחרונה
   crux          String?           // "מוקד המחלוקת" — נכתב מחוקה v3 (PLAN 4.3)
   canonicalTopic String?          // כותרת קנונית מהנרמול הסמנטי (PLAN 1.5ב, M4)
+  depth         String   @default("standard") // summary / standard / deep — בחירת הקורא (D7); נאכף ביצירה מ-v3
 
   // job-row (PLAN 5.1): שורת pending היא המנעול והתור — unique slug = mutex.
   generationStartedAt DateTime?   // לשחרור pending תקוע (timeout)
