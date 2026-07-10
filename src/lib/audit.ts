@@ -25,6 +25,10 @@ export interface AuditResult {
 }
 
 // בניית שני מבטים: מוסווה (למלאכה) וגלוי (לזהות).
+//
+// גבולות ההסוואה — ביושר (PLAN 3.4): ההסוואה מחליפה תוויות (שמות עדשות ומקורות),
+// לא תוכן. עדשה שכתובה בקולה של מסורת מזוהה מגוף הטקסט. כלומר המבט ה"מוסווה"
+// מנטרל הטיית-תווית בלבד; הסוואה ברמת התוכן (השוואת פסקאות מנותקות-הקשר) — v2.
 function buildViews(entry: Entry): { masked: string; unmasked: string } {
   const letters = ["א", "ב", "ג", "ד", "ה"];
   const masked = {
@@ -39,12 +43,15 @@ function buildViews(entry: Entry): { masked: string; unmasked: string } {
       })),
     })),
   };
+  // המבט הגלוי כולל גם את ה-body: ממדים 4-6 (עומק ביסוס, עושר, שפה) נשפטים
+  // על הטקסט המלא — לא על תקציר בלבד (תוקן ב-PLAN 3.4).
   const unmasked = {
     topic: entry.topic,
     lenses: entry.lenses.map((l) => ({
       name: l.name,
       family: l.family,
       summary: l.summary,
+      body: l.body,
       epistemicType: l.epistemicType,
       grounding: l.grounding,
     })),

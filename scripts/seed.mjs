@@ -9,6 +9,9 @@ const SAMPLE = {
   slug: "בריאת-העולם",
   topic: "בריאת העולם",
   topicKind: "meaning",
+  // מוקד המחלוקת — מדגים את סקשן ה-crux במצב השוואה (PLAN 4.3; בערכים אמיתיים נכתב מ-v3)
+  crux:
+    "העדשות חלוקות על שאלת המקור — רצון מכוון, תהליך פיזיקלי, או מחזור נצחי — ועל מעמדו של הזמן: התחלה חד-פעמית מול מחזוריות. הן מסכימות שהשאלה עצמה ראויה ליראה, ששאלת 'מה קדם' נותרת פתוחה, ושהתשובה מעצבת את מקומו של האדם בעולם.",
   lenses: [
     {
       name: "יהדות דתית",
@@ -21,6 +24,7 @@ const SAMPLE = {
         {
           source: "ספר בראשית, פרק א",
           explanation: "תיאור הבריאה בשישה ימים ומנוחת השבת ביום השביעי.",
+          url: "https://www.sefaria.org.il/Genesis.1",
         },
         {
           source: "משנה, אבות ה׳:א׳ — 'בעשרה מאמרות נברא העולם'",
@@ -93,6 +97,7 @@ async function main() {
       slug: SAMPLE.slug,
       topic: SAMPLE.topic,
       topicKind: SAMPLE.topicKind,
+      crux: SAMPLE.crux,
       lenses: {
         create: SAMPLE.lenses.map((l, i) => ({
           name: l.name,

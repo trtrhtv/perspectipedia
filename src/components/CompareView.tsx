@@ -32,22 +32,33 @@ export default function CompareView({
   rightIndex,
   onLeft,
   onRight,
+  crux,
 }: {
   lenses: Lens[];
   leftIndex: number;
   rightIndex: number;
   onLeft: (i: number) => void;
   onRight: (i: number) => void;
+  crux?: string;
 }) {
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <div className="rounded-2xl border border-line bg-paper p-5">
-        <ColumnSelect lenses={lenses} value={leftIndex} onChange={onLeft} />
-        <LensView lens={lenses[leftIndex]} compact />
-      </div>
-      <div className="rounded-2xl border border-line bg-paper p-5">
-        <ColumnSelect lenses={lenses} value={rightIndex} onChange={onRight} />
-        <LensView lens={lenses[rightIndex]} compact />
+    <div>
+      {/* מוקד המחלוקת (PLAN 4.3) — נכתב מחוקה v3; מוצג רק כשקיים */}
+      {crux && (
+        <section className="mb-6 rounded-2xl border border-line bg-white p-4">
+          <h3 className="mb-1.5 text-sm font-semibold text-ink">מוקד המחלוקת</h3>
+          <p className="text-sm leading-relaxed text-muted">{crux}</p>
+        </section>
+      )}
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="rounded-2xl border border-line bg-paper p-5">
+          <ColumnSelect lenses={lenses} value={leftIndex} onChange={onLeft} />
+          <LensView lens={lenses[leftIndex]} compact />
+        </div>
+        <div className="rounded-2xl border border-line bg-paper p-5">
+          <ColumnSelect lenses={lenses} value={rightIndex} onChange={onRight} />
+          <LensView lens={lenses[rightIndex]} compact />
+        </div>
       </div>
     </div>
   );

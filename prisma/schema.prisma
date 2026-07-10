@@ -18,6 +18,8 @@ model Entry {
   status        String   @default("published") // pending / published / needs_review / refused / failed / removed
   refusalReason String?           // אם status=refused — הסיבה (לשנאה/אדם פרטי/נזק)
   lastError     String?           // אם status=failed — השגיאה האחרונה
+  crux          String?           // "מוקד המחלוקת" — נכתב מחוקה v3 (PLAN 4.3)
+  canonicalTopic String?          // כותרת קנונית מהנרמול הסמנטי (PLAN 1.5ב, M4)
 
   // job-row (PLAN 5.1): שורת pending היא המנעול והתור — unique slug = mutex.
   generationStartedAt DateTime?   // לשחרור pending תקוע (timeout)
@@ -33,6 +35,8 @@ model Entry {
   outputTokens  Int?
   costUsd       Float?            // עלות מוערכת לפי מחירון (docs/COST_AND_KEY.md)
   rawOutput     String?           // פלט המודל הגולמי — post-mortem בלי לשחזר יצירה
+  auditVerdict  String?           // pass / revise / fail — תוצאת המבקר (PLAN 3.7)
+  auditJson     Json?             // AuditResult מלא — דשבורד הטיה עתידי
 
   createdAt     DateTime @default(now())
 

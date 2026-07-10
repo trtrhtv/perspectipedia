@@ -81,6 +81,7 @@ export async function getEntryResultBySlug(slug: string): Promise<EntryResult | 
       slug: row.slug,
       topic: row.topic,
       topicKind: row.topicKind as Entry["topicKind"],
+      crux: row.crux ?? undefined,
       lenses: row.lenses.map((l) => ({
         name: l.name,
         family: l.family as Lens["family"],

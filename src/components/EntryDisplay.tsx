@@ -6,6 +6,7 @@ import { TOPIC_KIND_LABELS } from "@/lib/types";
 import LensSwitcher from "./LensSwitcher";
 import LensView from "./LensView";
 import CompareView from "./CompareView";
+import EmpiricalBanner from "./EmpiricalBanner";
 
 // תצוגה טהורה של ערך קיים — מקבלת entry כ-prop, לא יוצרת כלום.
 export default function EntryDisplay({ entry }: { entry: Entry }) {
@@ -17,10 +18,12 @@ export default function EntryDisplay({ entry }: { entry: Entry }) {
   return (
     <>
       {entry.topicKind && (
-        <p className="mb-6 text-sm text-muted">
+        <p className="mb-4 text-sm text-muted">
           סוג הנושא: {TOPIC_KIND_LABELS[entry.topicKind] ?? entry.topicKind}
         </p>
       )}
+
+      <EmpiricalBanner topicKind={entry.topicKind} />
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         {!compare ? (
@@ -48,6 +51,7 @@ export default function EntryDisplay({ entry }: { entry: Entry }) {
           rightIndex={right}
           onLeft={setLeft}
           onRight={setRight}
+          crux={entry.crux}
         />
       )}
     </>
