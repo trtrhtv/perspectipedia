@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { isAdminAuthorized } from "@/lib/adminAuth";
+import { topicToSlug } from "@/lib/slug";
 
 // API הניהול (PLAN 1.3): רשימה מלאה (כל המצבים), שינוי מצב, מחיקה.
 // כל הפעולות דורשות ADMIN_TOKEN.
@@ -41,7 +42,7 @@ const ALLOWED_STATUS = new Set(["published", "needs_review", "removed"]);
 export async function PATCH(request: Request) {
   if (!isAdminAuthorized(request)) return unauthorized();
 
-  let body: { slug?: string; status?: string; resolveReports?: boolean };
+  let body: { slug?: string; status?: string; resolveReports?: boolean; addAlias?: string };
   try {
     body = await request.json();
   } catch {
@@ -52,6 +53,18 @@ export async function PATCH(request: Request) {
 
   const entry = await prisma.entry.findUnique({ where: { slug } });
   if (!entry) return NextResponse.json({ error: "ערך לא נמצא." }, { status: 404 });
+
+  if (body.addAlias) {
+    const alias = topicToSlug(body.addAlias);
+    if (!alias || alias === slug) {
+      return NextResponse.json({ error: "alias לא תקין." }, { status: 400 });
+    }
+    await prisma.topicAlias.upsert({
+      where: { alias },
+      update: { entryId: entry.id, source: "admin" },
+      create: { alias, entryId: entry.id, source: "admin" },
+    });
+  }
 
   if (body.status) {
     if (!ALLOWED_STATUS.has(body.status)) {

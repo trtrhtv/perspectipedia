@@ -19,6 +19,7 @@ model Entry {
   refusalReason String?           // אם status=refused — הסיבה (לשנאה/אדם פרטי/נזק)
   lenses        Lens[]
   reports       Report[]
+  aliases       TopicAlias[]
 
   // provenance — זול עכשיו, קריטי אחר כך (עריכה היברידית, מעקב איכות)
   promptVersion String   @default("v1")
@@ -31,6 +32,16 @@ model Entry {
   createdAt     DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ניסוח חלופי של נושא שמנתב לערך קיים (PLAN 1.5) — מונע כפילויות ("שואה"/"השואה").
+model TopicAlias {
+  id        String   @id @default(cuid())
+  alias     String   @unique          // slug מנורמל של הניסוח החלופי
+  entryId   String
+  entry     Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  source    String                    // deterministic / semantic / admin
+  createdAt DateTime @default(now())
 }
 
 // דיווח קורא על בעיה/הטיה בערך (PLAN 1.4) — מוצג ב-admin, מזין את ה-eval בהמשך.

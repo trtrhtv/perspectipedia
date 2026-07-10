@@ -1,6 +1,6 @@
 import { prisma } from "./db";
 import { generateEntry } from "./claude";
-import { topicToSlug } from "./slug";
+import { topicToSlug, normalizeTopic, heVariantSlug } from "./slug";
 import { limitCreate } from "./ratelimit";
 import type { Entry, Lens } from "./types";
 
@@ -84,6 +84,44 @@ export async function getEntryBySlug(slug: string): Promise<Entry | null> {
   return res?.kind === "entry" ? res.entry : null;
 }
 
+// פתרון slug לערך קיים (PLAN 1.5א): התאמה מדויקת → alias → וריאנט ה"א-הידיעה.
+// מחזיר את ה-slug הקנוני של הערך אם קיים, אחרת null.
+export async function resolveExistingSlug(slug: string): Promise<string | null> {
+  // 1. התאמה מדויקת — תמיד גוברת.
+  const exact = await prisma.entry.findUnique({ where: { slug }, select: { slug: true } });
+  if (exact) return exact.slug;
+
+  // 2. טבלת aliases.
+  const alias = await prisma.topicAlias.findUnique({
+    where: { alias: slug },
+    select: { entry: { select: { slug: true } } },
+  });
+  if (alias) return alias.entry.slug;
+
+  // 3. וריאנט ה"א-הידיעה ("השואה" ↔ "שואה") — כערך או כ-alias.
+  const variant = heVariantSlug(slug);
+  if (variant) {
+    const varEntry = await prisma.entry.findUnique({
+      where: { slug: variant },
+      select: { id: true, slug: true },
+    });
+    if (varEntry) {
+      // רישום עצלן — הפעם הבאה תפגע ישירות בטבלת ה-aliases.
+      await prisma.topicAlias
+        .create({ data: { alias: slug, entryId: varEntry.id, source: "deterministic" } })
+        .catch(() => null); // מרוץ על unique — לא קריטי
+      return varEntry.slug;
+    }
+    const varAlias = await prisma.topicAlias.findUnique({
+      where: { alias: variant },
+      select: { entry: { select: { slug: true } } },
+    });
+    if (varAlias) return varAlias.entry.slug;
+  }
+
+  return null;
+}
+
 // שורת לוג מובנית אחת לכל יצירה — observability של usage/עלות (PLAN 0.4).
 function logGeneration(fields: Record<string, unknown>): void {
   console.log(JSON.stringify({ event: "generation", ...fields }));
@@ -100,11 +138,15 @@ export async function getOrCreateEntry(
   topic: string,
   opts: { ip?: string } = {}
 ): Promise<EntryResult> {
-  const slug = topicToSlug(topic);
+  const cleanTopic = normalizeTopic(topic);
+  const slug = topicToSlug(cleanTopic);
 
-  // 1. cache check — כולל ערכים שסורבו. ערכים קיימים נטענים חופשי, בלי rate limit.
-  const existing = await getEntryResultBySlug(slug);
-  if (existing) return existing;
+  // 1. cache check — כולל alias ווריאנט ה"א (PLAN 1.5א). ערכים קיימים בלי rate limit.
+  const canonical = await resolveExistingSlug(slug);
+  if (canonical) {
+    const existing = await getEntryResultBySlug(canonical);
+    if (existing) return existing;
+  }
 
   // 2. rate limit פר-IP — רק יצירה חדשה נספרת (PLAN 1.1).
   const rl = await limitCreate(opts.ip ?? "unknown");
@@ -117,8 +159,8 @@ export async function getOrCreateEntry(
     return { kind: "capped" };
   }
 
-  // 3. generate — מנוע ה-LLM (מחזיר ערך או סירוב).
-  const result = await generateEntry(topic);
+  // 3. generate — מנוע ה-LLM (מחזיר ערך או סירוב). הנושא המנורמל בלבד.
+  const result = await generateEntry(cleanTopic);
 
   // 4. persist — נצבר לספרייה. מטפל במרוץ (אם נוצר במקביל).
   try {
@@ -126,7 +168,7 @@ export async function getOrCreateEntry(
       await prisma.entry.create({
         data: {
           slug,
-          topic,
+          topic: cleanTopic,
           topicKind: "meaning",
           status: "refused",
           refusalReason: result.reason,

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { getEntryResultBySlug } from "@/lib/entryService";
+import { notFound, redirect } from "next/navigation";
+import { getEntryResultBySlug, resolveExistingSlug } from "@/lib/entryService";
 import { slugToTopic } from "@/lib/slug";
 import EntryDisplay from "@/components/EntryDisplay";
 import CreateEntryFlow from "@/components/CreateEntryFlow";
@@ -24,6 +24,14 @@ export default async function EntryPage({ params }: Params) {
   const { slug: raw } = await params;
   const slug = decodeURIComponent(raw);
   const result = await getEntryResultBySlug(slug);
+
+  // ניסוח חלופי שמנתב לערך קיים (alias / ה"א-הידיעה) → הפניה לכתובת הקנונית.
+  if (result === null) {
+    const canonical = await resolveExistingSlug(slug);
+    if (canonical && canonical !== slug) {
+      redirect(`/entry/${encodeURIComponent(canonical)}`);
+    }
+  }
 
   if (result?.kind === "removed") notFound();
 
