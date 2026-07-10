@@ -114,7 +114,8 @@ export async function getOrCreateEntry(topic: string): Promise<EntryResult> {
         slug: entry.slug,
         topic: entry.topic,
         topicKind: entry.topicKind,
-        status: "published",
+        // מבקר הסימטריה סימן לבדיקה → מוחזק מהספרייה עד סקירה.
+        status: meta.needsReview ? "needs_review" : "published",
         promptVersion: meta.promptVersion,
         model: meta.model,
         inputTokens: meta.inputTokens,

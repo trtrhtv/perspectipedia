@@ -95,3 +95,61 @@ export const ENTRY_JSON_SCHEMA = {
   required: ["topic", "topic_kind", "refused", "lenses"],
   additionalProperties: false,
 } as const;
+
+// סכמת הפלט של מבקר הסימטריה (ראו docs/BIAS_STRATEGY.md §3).
+export const AUDIT_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    scores: {
+      type: "object",
+      description: "ציון 1-5 לכל ממד (5 = סימטרי לחלוטין)",
+      properties: {
+        charity: { type: "integer" },
+        depth: { type: "integer" },
+        language: { type: "integer" },
+        missing: { type: "integer" },
+        grounding_strength: { type: "integer" },
+        meta_framing: { type: "integer" },
+      },
+      required: [
+        "charity",
+        "depth",
+        "language",
+        "missing",
+        "grounding_strength",
+        "meta_framing",
+      ],
+      additionalProperties: false,
+    },
+    flags: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          dimension: { type: "string" },
+          severity: { type: "string", enum: ["minor", "major"] },
+          lens: { type: "string" },
+          evidence: { type: "string", description: "ציטוט מדויק מהערך" },
+          fix_instruction: { type: "string" },
+        },
+        required: ["dimension", "severity", "lens", "evidence", "fix_instruction"],
+        additionalProperties: false,
+      },
+    },
+    missing_lenses: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          why_grounded: { type: "string" },
+        },
+        required: ["name", "why_grounded"],
+        additionalProperties: false,
+      },
+    },
+    verdict: { type: "string", enum: ["pass", "revise", "fail"] },
+  },
+  required: ["scores", "flags", "verdict"],
+  additionalProperties: false,
+} as const;

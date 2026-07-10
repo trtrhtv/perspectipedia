@@ -3,6 +3,7 @@ import { ENTRY_JSON_SCHEMA } from "./schema";
 import { SYSTEM_PROMPT, PROMPT_VERSION, buildUserPrompt } from "./prompts";
 import type { Entry, Lens } from "./types";
 import { topicToSlug } from "./slug";
+import { isAuditEnabled, runAudit } from "./audit";
 
 // מודל: Claude Opus 4.8 — הכי חזק, קריטי לניואנס ולייצוג מכבד.
 const MODEL = "claude-opus-4-8";
@@ -22,6 +23,7 @@ export interface GenerationMeta {
   model: string;
   inputTokens: number | null;
   outputTokens: number | null;
+  needsReview?: boolean; // מבקר הסימטריה סימן את הערך לבדיקה אנושית
 }
 
 // תוצאה מובחנת: או ערך תקין, או סירוב מכובד (נושא מחוץ לתחום).
@@ -144,6 +146,10 @@ export async function generateEntry(topic: string): Promise<GenerationResult> {
         throw new Error("too_few_lenses: לא נוצרו מספיק עדשות מבוססות.");
       }
 
+      // מיון אלפביתי — סדר הצגה ניטרלי (מסיר "המודל שם את המועדף ראשון").
+      // ראו docs/BIAS_STRATEGY.md §2.6.
+      valid.sort((a, b) => a.name.localeCompare(b.name, "he"));
+
       const lenses: Lens[] = valid.map((l) => ({
         name: l.name,
         family: l.family,
@@ -154,16 +160,23 @@ export async function generateEntry(topic: string): Promise<GenerationResult> {
         confidence: l.confidence,
       }));
 
-      return {
-        refused: false,
-        meta,
-        entry: {
-          slug: topicToSlug(topic),
-          topic: raw.topic || topic,
-          topicKind: raw.topic_kind,
-          lenses,
-        },
+      const entry: Entry = {
+        slug: topicToSlug(topic),
+        topic: raw.topic || topic,
+        topicKind: raw.topic_kind,
+        lenses,
       };
+
+      // מבקר הסימטריה האדוורסרי (flag-gated). verdict שאינו pass → סימון לבדיקה.
+      // TODO(v1.1): סבב תיקון אחד לפי ה-flags (דורש מפתח + eval לכיול).
+      if (isAuditEnabled()) {
+        const audit = await runAudit(entry);
+        if (audit && audit.verdict !== "pass") {
+          meta.needsReview = true;
+        }
+      }
+
+      return { refused: false, meta, entry };
     } catch (err) {
       lastErr = err;
       // MissingApiKey לא ניתן לתיקון ב-retry — זרוק מיד.

@@ -37,12 +37,18 @@ export default function HomePage() {
         </div>
       </section>
 
-      <div className="mt-8 text-center">
+      <div className="mt-8 flex justify-center gap-5 text-center text-sm">
         <Link
           href="/library"
-          className="text-sm text-muted underline-offset-4 transition hover:text-accent hover:underline"
+          className="text-muted underline-offset-4 transition hover:text-accent hover:underline"
         >
-          עיון בספריית הערכים ←
+          ספריית הערכים ←
+        </Link>
+        <Link
+          href="/method"
+          className="text-muted underline-offset-4 transition hover:text-accent hover:underline"
+        >
+          על השיטה שלנו ←
         </Link>
       </div>
 
