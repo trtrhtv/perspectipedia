@@ -18,13 +18,18 @@ export default function LensView({ lens, compact = false }: { lens: Lens; compac
           <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-muted">
             {FAMILY_LABELS[lens.family] ?? lens.family}
           </span>
-          {/* הסטטוס האפיסטמי — רכיב בולט ומוסבר, לא מטא-דאטה (PLAN 4.1) */}
-          <span
-            title={EPISTEMIC_EXPLANATIONS[lens.epistemicType]}
-            className={`cursor-help rounded-full border px-2.5 py-0.5 text-xs font-medium ${epistemicTint(lens.epistemicType)}`}
-          >
-            {EPISTEMIC_LABELS[lens.epistemicType] ?? lens.epistemicType}
-          </span>
+          {/* הסטטוס האפיסטמי — רכיב בולט ומוסבר, לא מטא-דאטה (PLAN 4.1).
+              details/summary נגיש גם במגע ובמקלדת — לא רק tooltip לעכבר (PRE_KEY 2.2). */}
+          <details className="relative inline-block">
+            <summary
+              className={`cursor-pointer list-none rounded-full border px-2.5 py-0.5 text-xs font-medium marker:content-none ${epistemicTint(lens.epistemicType)}`}
+            >
+              {EPISTEMIC_LABELS[lens.epistemicType] ?? lens.epistemicType} ⓘ
+            </summary>
+            <p className="absolute z-10 mt-1 w-64 rounded-xl border border-line bg-white p-3 text-xs font-normal leading-relaxed text-ink shadow-lg">
+              {EPISTEMIC_EXPLANATIONS[lens.epistemicType]}
+            </p>
+          </details>
         </div>
         <p className="text-base leading-relaxed text-muted">{lens.summary}</p>
       </header>

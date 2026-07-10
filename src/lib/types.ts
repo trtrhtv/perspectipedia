@@ -41,6 +41,8 @@ export interface Entry {
   lenses: Lens[];
   // "מוקד המחלוקת" — על מה העדשות חלוקות ועל מה מסכימות (נכתב מחוקה v3; ריק בערכים ישנים).
   crux?: string;
+  // חותמת שקיפות (PRE_KEY 2.3) — מוצגת בתחתית הערך.
+  provenance?: { model: string; promptVersion: string; createdAt: string };
 }
 
 // תוויות עבריות למשפחות עדשות ולסוגי טענה

@@ -82,7 +82,12 @@ export async function getEntryResultBySlug(slug: string): Promise<EntryResult | 
       topic: row.topic,
       topicKind: row.topicKind as Entry["topicKind"],
       crux: row.crux ?? undefined,
-      lenses: row.lenses.map((l) => ({
+      provenance: {
+        model: row.model,
+        promptVersion: row.promptVersion,
+        createdAt: row.createdAt.toISOString(),
+      },
+      lenses: seededShuffle(row.lenses, row.slug).map((l) => ({
         name: l.name,
         family: l.family as Lens["family"],
         summary: l.summary,
@@ -99,6 +104,30 @@ export async function getEntryResultBySlug(slug: string): Promise<EntryResult | 
 export async function getEntryBySlug(slug: string): Promise<Entry | null> {
   const res = await getEntryResultBySlug(slug);
   return res?.kind === "entry" ? res.entry : null;
+}
+
+// ערבוב דטרמיניסטי פר-ערך (PRE_KEY 2.1): מיון אלפביתי הוא הטיה שיטתית כלל-אתרית —
+// אותה עדשה תמיד ראשונה בכל הערכים. ערבוב שנגזר מה-slug מפזר את יתרון-המיקום בין
+// ערכים, ונשאר יציב לחלוטין לאותו ערך (אותו סדר בכל טעינה, cache-friendly).
+function seededShuffle<T>(items: T[], seedText: string): T[] {
+  let seed = 0;
+  for (let i = 0; i < seedText.length; i++) {
+    seed = (seed * 31 + seedText.charCodeAt(i)) >>> 0;
+  }
+  const rand = () => {
+    // mulberry32
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 // פתרון slug לערך קיים (PLAN 1.5א): התאמה מדויקת → alias → וריאנט ה"א-הידיעה.

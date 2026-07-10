@@ -70,7 +70,22 @@ export default async function EntryPage({ params }: Params) {
       <h1 className="mb-1 text-3xl font-bold tracking-tight">{topic}</h1>
 
       {result === null && <CreateEntryFlow topic={topic} slug={slug} />}
-      {result?.kind === "entry" && <EntryDisplay entry={result.entry} />}
+      {result?.kind === "entry" && (
+        <>
+          <EntryDisplay entry={result.entry} />
+          {/* חותמת שקיפות (PRE_KEY 2.3) — BIAS_STRATEGY §6 ברמת הערך הבודד */}
+          {result.entry.provenance && (
+            <footer className="mt-10 border-t border-line pt-4 text-center text-xs text-muted/80">
+              הערך נוצר בעזרת בינה מלאכותית ({result.entry.provenance.model}) · חוקה{" "}
+              {result.entry.provenance.promptVersion} ·{" "}
+              {new Date(result.entry.provenance.createdAt).toLocaleDateString("he-IL")} ·{" "}
+              <Link href="/method" className="underline underline-offset-2 hover:text-accent">
+                איך אנחנו מתמודדים עם הטיות
+              </Link>
+            </footer>
+          )}
+        </>
+      )}
       {result?.kind === "refused" && <RefusedState reason={result.reason} />}
       {result?.kind === "pending_review" && <PendingReviewState />}
       {/* refresh באמצע יצירה חוזר לאותה יצירה — polling ממשיך מהשורה שב-DB */}
