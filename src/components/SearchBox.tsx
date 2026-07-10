@@ -12,7 +12,7 @@ export default function SearchBox({ autoFocus = false }: { autoFocus?: boolean }
     const t = topic.trim();
     if (!t) return;
     const slug = topicToSlug(t);
-    router.push(`/entry/${encodeURIComponent(slug)}?q=${encodeURIComponent(t)}`);
+    router.push(`/entry/${encodeURIComponent(slug)}`);
   }
 
   return (

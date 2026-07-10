@@ -39,7 +39,8 @@ export async function listEntries(): Promise<EntrySummary[]> {
 }
 
 // שליפת ערך קיים מהמסד לפי slug — מחזיר גם ערכים שסורבו (כדי לא לייצר שוב).
-async function fetchBySlug(slug: string): Promise<EntryResult | null> {
+// משמש גם את דף הערך (SSR): הדף מציג כל מצב לפי ה-kind, בלי לייצר.
+export async function getEntryResultBySlug(slug: string): Promise<EntryResult | null> {
   const row = await prisma.entry.findUnique({
     where: { slug },
     include: { lenses: { orderBy: { order: "asc" } } },
@@ -77,7 +78,7 @@ async function fetchBySlug(slug: string): Promise<EntryResult | null> {
 
 // גרסה ציבורית — שליפה בלבד (ל-server rendering של ערך קיים).
 export async function getEntryBySlug(slug: string): Promise<Entry | null> {
-  const res = await fetchBySlug(slug);
+  const res = await getEntryResultBySlug(slug);
   return res?.kind === "entry" ? res.entry : null;
 }
 
@@ -92,7 +93,7 @@ export async function getOrCreateEntry(topic: string): Promise<EntryResult> {
   const slug = topicToSlug(topic);
 
   // 1. cache check — כולל ערכים שסורבו.
-  const existing = await fetchBySlug(slug);
+  const existing = await getEntryResultBySlug(slug);
   if (existing) return existing;
 
   // 2. מכסה יומית — חוסמת abuse בנפח.
@@ -147,7 +148,7 @@ export async function getOrCreateEntry(topic: string): Promise<EntryResult> {
     return { kind: "entry", entry };
   } catch {
     // מרוץ — אם נוצר במקביל, החזר את מה שקיים.
-    const raced = await fetchBySlug(slug);
+    const raced = await getEntryResultBySlug(slug);
     if (raced) return raced;
     // אחרת החזר את התוצאה שיצרנו (בלי persist).
     return result.refused
