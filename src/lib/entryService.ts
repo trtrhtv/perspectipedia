@@ -1,6 +1,7 @@
 import { prisma } from "./db";
 import { generateEntry } from "./claude";
 import { topicToSlug } from "./slug";
+import { limitCreate } from "./ratelimit";
 import type { Entry, Lens } from "./types";
 
 // מכסת יצירות יומית גלובלית — חוסמת abuse בנפח (ראו docs/ROADMAP.md §5).
@@ -12,6 +13,7 @@ export type EntryResult =
   | { kind: "refused"; reason: string }
   | { kind: "pending_review" } // מוחזק לסקירת הוגנות — התוכן לא נחשף
   | { kind: "removed" } // הוסר על ידי מפעיל — ה-slug נשאר תפוס
+  | { kind: "rate_limited"; retryAfterSeconds?: number } // חריגת יצירות פר-IP
   | { kind: "capped" };
 
 export interface EntrySummary {
@@ -93,15 +95,24 @@ async function countGenerationsToday(): Promise<number> {
   return prisma.entry.count({ where: { createdAt: { gte: start } } });
 }
 
-// לולאת הליבה: נושא → cache → cap → generate → persist → return
-export async function getOrCreateEntry(topic: string): Promise<EntryResult> {
+// לולאת הליבה: נושא → cache → rate limit → cap → generate → persist → return
+export async function getOrCreateEntry(
+  topic: string,
+  opts: { ip?: string } = {}
+): Promise<EntryResult> {
   const slug = topicToSlug(topic);
 
-  // 1. cache check — כולל ערכים שסורבו.
+  // 1. cache check — כולל ערכים שסורבו. ערכים קיימים נטענים חופשי, בלי rate limit.
   const existing = await getEntryResultBySlug(slug);
   if (existing) return existing;
 
-  // 2. מכסה יומית — חוסמת abuse בנפח.
+  // 2. rate limit פר-IP — רק יצירה חדשה נספרת (PLAN 1.1).
+  const rl = await limitCreate(opts.ip ?? "unknown");
+  if (!rl.allowed) {
+    return { kind: "rate_limited", retryAfterSeconds: rl.retryAfterSeconds };
+  }
+
+  // 3. מכסה יומית — קו הגנה שני, חוסמת abuse בנפח כולל.
   if (GEN_DAILY_CAP > 0 && (await countGenerationsToday()) >= GEN_DAILY_CAP) {
     return { kind: "capped" };
   }

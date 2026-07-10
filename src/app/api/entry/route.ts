@@ -21,8 +21,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "הנושא ארוך מדי." }, { status: 400 });
   }
 
+  // IP לזיהוי rate limit — הערך הראשון ב-x-forwarded-for (מאחורי proxy כמו Vercel).
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown";
+
   try {
-    const result = await getOrCreateEntry(topic);
+    const result = await getOrCreateEntry(topic, { ip });
 
     switch (result.kind) {
       case "entry":
@@ -33,6 +39,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ pendingReview: true });
       case "removed":
         return NextResponse.json({ error: "הערך הוסר." }, { status: 404 });
+      case "rate_limited":
+        return NextResponse.json(
+          {
+            error: "יצרתם כמה ערכים בזמן קצר. אפשר להמשיך לקרוא — יצירה נוספת תתאפשר בעוד כשעה.",
+            code: "rate_limited",
+          },
+          {
+            status: 429,
+            headers: result.retryAfterSeconds
+              ? { "Retry-After": String(result.retryAfterSeconds) }
+              : undefined,
+          }
+        );
       case "capped":
         return NextResponse.json(
           {
