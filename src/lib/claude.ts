@@ -18,11 +18,39 @@ export class MissingApiKeyError extends Error {
   }
 }
 
+// המודל עצר עם stop_reason: refusal — סירוב ברמת ה-API (לא בשדה refused של הסכמה).
+// אין טעם ב-retry; ממופה לסירוב מכובד.
+class ModelRefusalError extends Error {
+  constructor() {
+    super("model refusal stop");
+    this.name = "ModelRefusalError";
+  }
+}
+
+// מחירון per-MTok — docs/COST_AND_KEY.md. adaptive thinking נספר כפלט.
+const PRICE_PER_MTOK: Record<string, { input: number; output: number }> = {
+  "claude-opus-4-8": { input: 5, output: 25 },
+  "claude-haiku-4-5-20251001": { input: 1, output: 5 },
+};
+
+export function estimateCostUsd(
+  model: string,
+  inputTokens: number | null,
+  outputTokens: number | null
+): number | null {
+  const price = PRICE_PER_MTOK[model];
+  if (!price || inputTokens == null || outputTokens == null) return null;
+  return (inputTokens * price.input + outputTokens * price.output) / 1_000_000;
+}
+
 export interface GenerationMeta {
   promptVersion: string;
   model: string;
   inputTokens: number | null;
   outputTokens: number | null;
+  costUsd: number | null; // עלות מוערכת לפי המחירון
+  rawOutput: string | null; // הפלט הגולמי — נשמר ל-post-mortem
+  durationMs: number | null;
   needsReview?: boolean; // מבקר הסימטריה סימן את הערך לבדיקה אנושית
 }
 
@@ -77,6 +105,7 @@ function passesGroundingBar(lens: RawLens): boolean {
 // קריאה אחת למודל + פענוח. זורק על stop reasons בעייתיים כדי לאפשר retry.
 async function callModel(topic: string): Promise<{ raw: RawEntry; meta: GenerationMeta }> {
   const client = getClient();
+  const startedAt = Date.now();
 
   const stream = client.messages.stream({
     model: MODEL,
@@ -95,19 +124,27 @@ async function callModel(topic: string): Promise<{ raw: RawEntry; meta: Generati
 
   const message = await stream.finalMessage();
 
+  const inputTokens = message.usage?.input_tokens ?? null;
+  const outputTokens = message.usage?.output_tokens ?? null;
+  const textBlock = message.content.find((b) => b.type === "text");
   const meta: GenerationMeta = {
     promptVersion: PROMPT_VERSION,
     model: MODEL,
-    inputTokens: message.usage?.input_tokens ?? null,
-    outputTokens: message.usage?.output_tokens ?? null,
+    inputTokens,
+    outputTokens,
+    costUsd: estimateCostUsd(MODEL, inputTokens, outputTokens),
+    rawOutput: textBlock?.type === "text" ? textBlock.text : null,
+    durationMs: Date.now() - startedAt,
   };
 
-  // טיפול מפורש ב-stop reasons — אחרת נופלים לשגיאה מבלבלת.
+  // טיפול מפורש בכל stop reason חריג — אחרת נופלים לשגיאת parse מבלבלת.
+  if (message.stop_reason === "refusal") {
+    throw new ModelRefusalError();
+  }
   if (message.stop_reason === "max_tokens") {
     throw new Error("truncated: הפלט נקטע (max_tokens).");
   }
 
-  const textBlock = message.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") {
     throw new Error("no_text: המודל לא החזיר תוכן טקסט.");
   }
@@ -181,6 +218,13 @@ export async function generateEntry(topic: string): Promise<GenerationResult> {
       lastErr = err;
       // MissingApiKey לא ניתן לתיקון ב-retry — זרוק מיד.
       if (err instanceof MissingApiKeyError) throw err;
+      // סירוב ברמת ה-API (stop_reason: refusal) — דטרמיניסטי, אין טעם ב-retry.
+      if (err instanceof ModelRefusalError) {
+        return {
+          refused: true,
+          reason: "המודל סירב לכתוב על הנושא הזה. ייתכן שהוא מחוץ לתחום של perspectipedia.",
+        };
+      }
       if (attempt < MAX_ATTEMPTS) continue;
     }
   }

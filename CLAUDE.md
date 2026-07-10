@@ -6,11 +6,13 @@
 
 ## קרא קודם
 1. **`docs/STATE.md`** — נקודת ההמשך: מה בנוי, מה נבדק, מה הצעד הבא. **התחל כאן.**
-2. `docs/PRODUCT_SPEC.md` — אפיון מוצר, 4 עקרונות-על.
-3. `docs/ARCHITECTURE.md` — ארכיטקטורה.
-4. `docs/ROADMAP.md` — הדרך להשקה (תוכנן ע"י Fable 5).
-5. `docs/BIAS_STRATEGY.md` — אסטרטגיית דה-ביאס (Fable 5).
-6. `docs/COST_AND_KEY.md` — כלכלה, עלויות, הוזלה.
+2. **`docs/ENGINEERING_PLAN.md`** — תוכנית הביצוע הפעילה (פאזות, משימות, הכרעות D1–D5).
+3. **`docs/ARCHITECTURE_TARGET.md`** — ארכיטקטורת היעד + מפת הבנייה (M1–M5).
+4. `docs/PRODUCT_SPEC.md` — אפיון מוצר, 4 עקרונות-על.
+5. `docs/ARCHITECTURE.md` — ארכיטקטורת v1 (מסמך היעד גובר).
+6. `docs/ROADMAP.md` — הדרך להשקה (תוכנן ע"י Fable 5).
+7. `docs/BIAS_STRATEGY.md` — אסטרטגיית דה-ביאס (Fable 5).
+8. `docs/COST_AND_KEY.md` — כלכלה, עלויות, הוזלה.
 
 ## הרצה מקומית (הסביבה טרייה — צריך להתקין)
 ```bash

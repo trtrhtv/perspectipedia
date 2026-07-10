@@ -24,6 +24,8 @@ model Entry {
   model         String   @default("claude-opus-4-8")
   inputTokens   Int?              // usage — לניהול עלויות
   outputTokens  Int?
+  costUsd       Float?            // עלות מוערכת לפי מחירון (docs/COST_AND_KEY.md)
+  rawOutput     String?           // פלט המודל הגולמי — post-mortem בלי לשחזר יצירה
 
   createdAt     DateTime @default(now())
 

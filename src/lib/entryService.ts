@@ -82,6 +82,11 @@ export async function getEntryBySlug(slug: string): Promise<Entry | null> {
   return res?.kind === "entry" ? res.entry : null;
 }
 
+// שורת לוג מובנית אחת לכל יצירה — observability של usage/עלות (PLAN 0.4).
+function logGeneration(fields: Record<string, unknown>): void {
+  console.log(JSON.stringify({ event: "generation", ...fields }));
+}
+
 async function countGenerationsToday(): Promise<number> {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -116,21 +121,25 @@ export async function getOrCreateEntry(topic: string): Promise<EntryResult> {
           refusalReason: result.reason,
         },
       });
+      logGeneration({ slug, finalStatus: "refused" });
       return { kind: "refused", reason: result.reason };
     }
 
     const { entry, meta } = result;
+    const finalStatus = meta.needsReview ? "needs_review" : "published";
     await prisma.entry.create({
       data: {
         slug: entry.slug,
         topic: entry.topic,
         topicKind: entry.topicKind,
         // מבקר הסימטריה סימן לבדיקה → מוחזק מהספרייה עד סקירה.
-        status: meta.needsReview ? "needs_review" : "published",
+        status: finalStatus,
         promptVersion: meta.promptVersion,
         model: meta.model,
         inputTokens: meta.inputTokens,
         outputTokens: meta.outputTokens,
+        costUsd: meta.costUsd,
+        rawOutput: meta.rawOutput,
         lenses: {
           create: entry.lenses.map((l, i) => ({
             name: l.name,
@@ -144,6 +153,17 @@ export async function getOrCreateEntry(topic: string): Promise<EntryResult> {
           })),
         },
       },
+    });
+    logGeneration({
+      slug: entry.slug,
+      model: meta.model,
+      promptVersion: meta.promptVersion,
+      inputTokens: meta.inputTokens,
+      outputTokens: meta.outputTokens,
+      costUsd: meta.costUsd,
+      durationMs: meta.durationMs,
+      lensCount: entry.lenses.length,
+      finalStatus,
     });
     return { kind: "entry", entry };
   } catch {
