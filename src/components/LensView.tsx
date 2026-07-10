@@ -1,5 +1,6 @@
 import type { Lens } from "@/lib/types";
 import { FAMILY_LABELS, EPISTEMIC_LABELS } from "@/lib/types";
+import ReportLink from "./ReportLink";
 
 export default function LensView({ lens, compact = false }: { lens: Lens; compact?: boolean }) {
   return (
@@ -44,6 +45,8 @@ export default function LensView({ lens, compact = false }: { lens: Lens; compac
           </p>
         )}
       </section>
+
+      <ReportLink lensName={lens.name} />
     </article>
   );
 }

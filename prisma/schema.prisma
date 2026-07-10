@@ -18,6 +18,7 @@ model Entry {
   status        String   @default("published") // published / refused / removed
   refusalReason String?           // אם status=refused — הסיבה (לשנאה/אדם פרטי/נזק)
   lenses        Lens[]
+  reports       Report[]
 
   // provenance — זול עכשיו, קריטי אחר כך (עריכה היברידית, מעקב איכות)
   promptVersion String   @default("v1")
@@ -30,6 +31,19 @@ model Entry {
   createdAt     DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// דיווח קורא על בעיה/הטיה בערך (PLAN 1.4) — מוצג ב-admin, מזין את ה-eval בהמשך.
+model Report {
+  id        String   @id @default(cuid())
+  entryId   String
+  entry     Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  lensName  String?           // אופציונלי: על איזו עדשה הדיווח
+  reason    String
+  status    String   @default("open") // open / resolved
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
 }
 
 model Lens {

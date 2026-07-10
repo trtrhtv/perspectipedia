@@ -6,6 +6,7 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
 const CREATES_PER_HOUR = Number(process.env.RATE_LIMIT_CREATES_PER_HOUR ?? "3");
+const REPORTS_PER_HOUR = Number(process.env.RATE_LIMIT_REPORTS_PER_HOUR ?? "10");
 const WINDOW_MS = 60 * 60 * 1000;
 
 export interface RateLimitResult {
@@ -14,18 +15,19 @@ export interface RateLimitResult {
 }
 
 interface RateLimiter {
-  limitCreate(ip: string): Promise<RateLimitResult>;
+  limit(ip: string): Promise<RateLimitResult>;
 }
 
 // --- מימוש in-memory: חלון הזזה פשוט. מספיק ל-dev ולשרת יחיד. ---
 class MemoryRateLimiter implements RateLimiter {
   private hits = new Map<string, number[]>();
+  constructor(private max: number) {}
 
-  async limitCreate(ip: string): Promise<RateLimitResult> {
+  async limit(ip: string): Promise<RateLimitResult> {
     const now = Date.now();
     const windowStart = now - WINDOW_MS;
     const recent = (this.hits.get(ip) ?? []).filter((t) => t > windowStart);
-    if (recent.length >= CREATES_PER_HOUR) {
+    if (recent.length >= this.max) {
       const oldest = Math.min(...recent);
       this.hits.set(ip, recent);
       return {
@@ -47,13 +49,16 @@ class MemoryRateLimiter implements RateLimiter {
 
 // --- מימוש Upstash: חלון הזזה מבוזר — שורד ריבוי instances ו-cold starts. ---
 class UpstashRateLimiter implements RateLimiter {
-  private limiter = new Ratelimit({
-    redis: Redis.fromEnv(),
-    limiter: Ratelimit.slidingWindow(CREATES_PER_HOUR, "1 h"),
-    prefix: "perspectipedia:create",
-  });
+  private limiter: Ratelimit;
+  constructor(max: number, prefix: string) {
+    this.limiter = new Ratelimit({
+      redis: Redis.fromEnv(),
+      limiter: Ratelimit.slidingWindow(max, "1 h"),
+      prefix: `perspectipedia:${prefix}`,
+    });
+  }
 
-  async limitCreate(ip: string): Promise<RateLimitResult> {
+  async limit(ip: string): Promise<RateLimitResult> {
     const res = await this.limiter.limit(ip);
     return {
       allowed: res.success,
@@ -64,17 +69,23 @@ class UpstashRateLimiter implements RateLimiter {
   }
 }
 
-function createLimiter(): RateLimiter {
+function createLimiter(max: number, prefix: string): RateLimiter {
   if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-    return new UpstashRateLimiter();
+    return new UpstashRateLimiter(max, prefix);
   }
-  return new MemoryRateLimiter();
+  return new MemoryRateLimiter(max);
 }
 
-// singleton ברמת המודול — חלון אחד לכל התהליך.
-const limiter = createLimiter();
+// singletons ברמת המודול — חלון אחד לכל התהליך, נפרד לכל שימוש.
+const createLimiterInstance = createLimiter(CREATES_PER_HOUR, "create");
+const reportLimiterInstance = createLimiter(REPORTS_PER_HOUR, "report");
 
 export function limitCreate(ip: string): Promise<RateLimitResult> {
   if (CREATES_PER_HOUR <= 0) return Promise.resolve({ allowed: true }); // 0 = כבוי
-  return limiter.limitCreate(ip);
+  return createLimiterInstance.limit(ip);
+}
+
+export function limitReport(ip: string): Promise<RateLimitResult> {
+  if (REPORTS_PER_HOUR <= 0) return Promise.resolve({ allowed: true }); // 0 = כבוי
+  return reportLimiterInstance.limit(ip);
 }
