@@ -10,6 +10,8 @@ const GEN_DAILY_CAP = Number(process.env.GEN_DAILY_CAP ?? "100");
 export type EntryResult =
   | { kind: "entry"; entry: Entry }
   | { kind: "refused"; reason: string }
+  | { kind: "pending_review" } // מוחזק לסקירת הוגנות — התוכן לא נחשף
+  | { kind: "removed" } // הוסר על ידי מפעיל — ה-slug נשאר תפוס
   | { kind: "capped" };
 
 export interface EntrySummary {
@@ -45,6 +47,14 @@ async function fetchBySlug(slug: string): Promise<EntryResult | null> {
   if (!row) return null;
   if (row.status === "refused") {
     return { kind: "refused", reason: row.refusalReason ?? "הנושא מחוץ לתחום." };
+  }
+  // מוחזק לסקירה — לא חושפים תוכן בשום מסלול ציבורי (גם לא URL ישיר).
+  if (row.status === "needs_review") {
+    return { kind: "pending_review" };
+  }
+  // הוסר — ה-slug תפוס (לא מייצרים מחדש), אבל אין מה להציג.
+  if (row.status === "removed") {
+    return { kind: "removed" };
   }
   return {
     kind: "entry",

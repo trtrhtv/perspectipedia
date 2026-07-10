@@ -29,6 +29,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ entry: result.entry });
       case "refused":
         return NextResponse.json({ refused: true, reason: result.reason });
+      case "pending_review":
+        return NextResponse.json({ pendingReview: true });
+      case "removed":
+        return NextResponse.json({ error: "הערך הוסר." }, { status: 404 });
       case "capped":
         return NextResponse.json(
           {

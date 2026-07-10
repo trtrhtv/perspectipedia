@@ -8,7 +8,7 @@ import LensSwitcher from "./LensSwitcher";
 import LensView from "./LensView";
 import CompareView from "./CompareView";
 
-type Status = "loading" | "ready" | "error" | "refused";
+type Status = "loading" | "ready" | "error" | "refused" | "pending_review";
 
 export default function EntryView({ topic }: { topic: string }) {
   const [status, setStatus] = useState<Status>("loading");
@@ -44,6 +44,10 @@ export default function EntryView({ topic }: { topic: string }) {
           setStatus("refused");
           return;
         }
+        if (data.pendingReview) {
+          setStatus("pending_review");
+          return;
+        }
         setEntry(data.entry as Entry);
         setRight(Math.min(1, (data.entry.lenses.length ?? 1) - 1));
         setStatus("ready");
@@ -72,6 +76,7 @@ export default function EntryView({ topic }: { topic: string }) {
       {status === "loading" && <LoadingState />}
       {status === "error" && error && <ErrorState error={error} />}
       {status === "refused" && <RefusedState reason={refusalReason} />}
+      {status === "pending_review" && <PendingReviewState />}
 
       {status === "ready" && entry && (
         <>
@@ -127,6 +132,21 @@ function LoadingState() {
       <p className="max-w-sm text-xs text-muted/70">
         זו הפעם הראשונה שהנושא הזה נחקר, אז אנחנו מייצרים אותו עכשיו. בפעם הבאה הוא ייטען מיד.
       </p>
+    </div>
+  );
+}
+
+function PendingReviewState() {
+  return (
+    <div className="mt-10 rounded-2xl border border-line bg-white p-6">
+      <p className="font-medium text-ink">הערך בבדיקת הוגנות</p>
+      <p className="mt-2 text-sm leading-relaxed text-muted">
+        הערך הזה נוצר, אבל מבקר הסימטריה שלנו סימן אותו לבדיקה נוספת לפני פרסום. הוא יופיע כאן
+        ברגע שהבדיקה תושלם.
+      </p>
+      <Link href="/" className="mt-4 inline-block text-sm text-accent hover:underline">
+        ← חזרה לדף הבית
+      </Link>
     </div>
   );
 }
