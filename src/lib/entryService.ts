@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { generateEntry, MissingApiKeyError } from "./claude";
 import { topicToSlug, normalizeTopic, heVariantSlug } from "./slug";
@@ -240,7 +240,8 @@ export async function getOrCreateEntry(
   }
 
   // 5. אין מפתח → 503 נקי לפני שנוצרת שורת pending שאין מי שיעבד אותה.
-  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+  // (במצב MOCK_LLM אין צורך במפתח — הצנרת רצה עם מודל-דמה.)
+  if (!process.env.ANTHROPIC_API_KEY?.trim() && process.env.MOCK_LLM !== "1") {
     throw new MissingApiKeyError();
   }
 
@@ -342,6 +343,8 @@ export async function processPendingEntry(slug: string): Promise<void> {
           outputTokens: meta.outputTokens,
           costUsd: meta.costUsd,
           rawOutput: meta.rawOutput,
+          auditVerdict: meta.auditVerdict ?? null,
+          auditJson: (meta.auditJson as Prisma.InputJsonValue) ?? Prisma.JsonNull,
           lastError: null,
           lenses: {
             create: entry.lenses.map((l, i) => ({

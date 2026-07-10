@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ENTRY_JSON_SCHEMA } from "./schema";
-import { SYSTEM_PROMPT, PROMPT_VERSION, buildUserPrompt } from "./prompts";
+import { SYSTEM_PROMPT, PROMPT_VERSION, buildUserPrompt, AUDIT_REVISION_INSTRUCTION } from "./prompts";
 import type { Entry, Lens } from "./types";
 import { topicToSlug } from "./slug";
-import { isAuditEnabled, runAudit } from "./audit";
+import { isAuditEnabled, runAudit, type AuditResult } from "./audit";
+import { isMockLlmEnabled, buildMockRaw } from "./mockLlm";
 
 // מודל: Claude Opus 4.8 — הכי חזק, קריטי לניואנס ולייצוג מכבד.
 const MODEL = "claude-opus-4-8";
@@ -52,6 +53,8 @@ export interface GenerationMeta {
   rawOutput: string | null; // הפלט הגולמי — נשמר ל-post-mortem
   durationMs: number | null;
   needsReview?: boolean; // מבקר הסימטריה סימן את הערך לבדיקה אנושית
+  auditVerdict?: string; // pass / revise / fail — הפסיקה הסופית (אחרי סבב תיקון)
+  auditJson?: unknown; // AuditResult מלא — נשמר לדשבורד הטיה עתידי
 }
 
 // תוצאה מובחנת: או ערך תקין, או סירוב מכובד (נושא מחוץ לתחום).
@@ -103,9 +106,34 @@ function passesGroundingBar(lens: RawLens): boolean {
 }
 
 // קריאה אחת למודל + פענוח. זורק על stop reasons בעייתיים כדי לאפשר retry.
-async function callModel(topic: string): Promise<{ raw: RawEntry; meta: GenerationMeta }> {
+async function callModel(
+  topic: string,
+  revision?: { previousRaw: RawEntry; audit: AuditResult }
+): Promise<{ raw: RawEntry; meta: GenerationMeta }> {
+  // מצב דמה (PRE_KEY 3.1) — צנרת מלאה בלי API. לעולם לא בפרודקשן.
+  if (isMockLlmEnabled()) {
+    const raw = buildMockRaw(topic, !!revision) as unknown as RawEntry;
+    return {
+      raw,
+      meta: {
+        promptVersion: PROMPT_VERSION,
+        model: "mock-llm",
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0,
+        rawOutput: JSON.stringify(raw),
+        durationMs: 0,
+      },
+    };
+  }
+
   const client = getClient();
   const startedAt = Date.now();
+
+  // סבב תיקון (PLAN 3.7): הערך המקורי + ממצאי הביקורת + הוראת התיקון מהחוקה.
+  const userContent = revision
+    ? `${buildUserPrompt(topic)}\n\nהערך שיצרת:\n${JSON.stringify(revision.previousRaw)}\n\n${AUDIT_REVISION_INSTRUCTION}\n\nממצאי הביקורת:\n${JSON.stringify(revision.audit.flags)}`
+    : buildUserPrompt(topic);
 
   const stream = client.messages.stream({
     model: MODEL,
@@ -119,7 +147,7 @@ async function callModel(topic: string): Promise<{ raw: RawEntry; meta: Generati
       },
     },
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: buildUserPrompt(topic) }],
+    messages: [{ role: "user", content: userContent }],
   } as Anthropic.MessageStreamParams);
 
   const message = await stream.finalMessage();
@@ -159,6 +187,39 @@ async function callModel(topic: string): Promise<{ raw: RawEntry; meta: Generati
   return { raw, meta };
 }
 
+// המרת פלט גולמי לערך: אכיפת מבחן הביסוס + מיון קנוני. משותף ליצירה ולסבב התיקון.
+function rawToEntry(raw: RawEntry, topic: string): Entry {
+  const valid = (raw.lenses ?? []).filter(passesGroundingBar);
+  if (valid.length < MIN_LENSES) {
+    // לא מספיק עדשות מבוססות — שווה ניסיון נוסף.
+    throw new Error("too_few_lenses: לא נוצרו מספיק עדשות מבוססות.");
+  }
+
+  // מיון אלפביתי — סדר אחסון קנוני; סדר ההצגה מעורבב דטרמיניסטית בהגשה (PRE_KEY 2.1).
+  valid.sort((a, b) => a.name.localeCompare(b.name, "he"));
+
+  return {
+    slug: topicToSlug(topic),
+    topic: raw.topic || topic,
+    topicKind: raw.topic_kind,
+    lenses: valid.map((l) => ({
+      name: l.name,
+      family: l.family,
+      summary: l.summary,
+      body: l.body,
+      grounding: l.grounding,
+      epistemicType: l.epistemic_type,
+      confidence: l.confidence,
+    })),
+  };
+}
+
+function sum(a: number | null, b: number | null): number | null {
+  if (a == null) return b;
+  if (b == null) return a;
+  return a + b;
+}
+
 export async function generateEntry(topic: string): Promise<GenerationResult> {
   let lastErr: unknown;
 
@@ -176,40 +237,34 @@ export async function generateEntry(topic: string): Promise<GenerationResult> {
         };
       }
 
-      // אכיפת מבחן הביסוס — סינון עדשות ללא ביסוס אמיתי.
-      const valid = (raw.lenses ?? []).filter(passesGroundingBar);
-      if (valid.length < MIN_LENSES) {
-        // לא מספיק עדשות מבוססות — שווה ניסיון נוסף.
-        throw new Error("too_few_lenses: לא נוצרו מספיק עדשות מבוססות.");
-      }
+      let entry = rawToEntry(raw, topic);
 
-      // מיון אלפביתי — סדר הצגה ניטרלי (מסיר "המודל שם את המועדף ראשון").
-      // ראו docs/BIAS_STRATEGY.md §2.6.
-      valid.sort((a, b) => a.name.localeCompare(b.name, "he"));
-
-      const lenses: Lens[] = valid.map((l) => ({
-        name: l.name,
-        family: l.family,
-        summary: l.summary,
-        body: l.body,
-        grounding: l.grounding,
-        epistemicType: l.epistemic_type,
-        confidence: l.confidence,
-      }));
-
-      const entry: Entry = {
-        slug: topicToSlug(topic),
-        topic: raw.topic || topic,
-        topicKind: raw.topic_kind,
-        lenses,
-      };
-
-      // מבקר הסימטריה האדוורסרי (flag-gated). verdict שאינו pass → סימון לבדיקה.
-      // TODO(v1.1): סבב תיקון אחד לפי ה-flags (דורש מפתח + eval לכיול).
+      // מבקר הסימטריה האדוורסרי (flag-gated) + סבב תיקון אחד (PLAN 3.7):
+      // verdict שאינו pass → קריאת תיקון לפי ה-flags → ביקורת חוזרת →
+      // אם עדיין לא pass → needs_review (תור ה-admin).
       if (isAuditEnabled()) {
-        const audit = await runAudit(entry);
+        let audit = await runAudit(entry);
         if (audit && audit.verdict !== "pass") {
-          meta.needsReview = true;
+          try {
+            const revision = await callModel(topic, { previousRaw: raw, audit });
+            const revisedEntry = rawToEntry(revision.raw, topic);
+            // עלות מצטברת: היצירה + התיקון.
+            meta.inputTokens = sum(meta.inputTokens, revision.meta.inputTokens);
+            meta.outputTokens = sum(meta.outputTokens, revision.meta.outputTokens);
+            meta.costUsd = sum(meta.costUsd, revision.meta.costUsd);
+            meta.rawOutput = revision.meta.rawOutput;
+            entry = revisedEntry;
+            audit = await runAudit(entry, { afterRevision: true });
+          } catch {
+            // תיקון שנכשל טכנית לא מפיל את הערך — נשאר עם המקור וסימון לבדיקה.
+          }
+          if (audit && audit.verdict !== "pass") {
+            meta.needsReview = true;
+          }
+        }
+        if (audit) {
+          meta.auditVerdict = audit.verdict;
+          meta.auditJson = audit;
         }
       }
 

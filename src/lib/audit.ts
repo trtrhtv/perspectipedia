@@ -63,7 +63,17 @@ function buildViews(entry: Entry): { masked: string; unmasked: string } {
 }
 
 // הרצת ביקורת על ערך. מחזיר null אם המבקר כשל (fail-open — לא חוסם יצירה).
-export async function runAudit(entry: Entry): Promise<AuditResult | null> {
+// opts.afterRevision: הביקורת החוזרת שאחרי סבב התיקון (PLAN 3.7).
+export async function runAudit(
+  entry: Entry,
+  opts: { afterRevision?: boolean } = {}
+): Promise<AuditResult | null> {
+  // מצב דמה (PRE_KEY 3.1) — בדיקת צנרת הביקורת בלי API.
+  if (process.env.MOCK_LLM === "1") {
+    const { buildMockAudit } = await import("./mockLlm");
+    return buildMockAudit(entry.topic, !!opts.afterRevision);
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
