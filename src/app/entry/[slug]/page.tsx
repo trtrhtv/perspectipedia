@@ -47,10 +47,17 @@ export default async function EntryPage({ params }: Params) {
 
       <h1 className="mb-1 text-3xl font-bold tracking-tight">{topic}</h1>
 
-      {result === null && <CreateEntryFlow topic={topic} />}
+      {result === null && <CreateEntryFlow topic={topic} slug={slug} />}
       {result?.kind === "entry" && <EntryDisplay entry={result.entry} />}
       {result?.kind === "refused" && <RefusedState reason={result.reason} />}
       {result?.kind === "pending_review" && <PendingReviewState />}
+      {/* refresh באמצע יצירה חוזר לאותה יצירה — polling ממשיך מהשורה שב-DB */}
+      {result?.kind === "pending" && (
+        <CreateEntryFlow topic={topic} slug={slug} initialStatus="creating" />
+      )}
+      {result?.kind === "failed" && (
+        <CreateEntryFlow topic={topic} slug={slug} initialStatus="failed" />
+      )}
     </main>
   );
 }

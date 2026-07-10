@@ -15,8 +15,13 @@ model Entry {
   slug          String   @unique // נגזר מהנושא — מפתח לחיפוש וקישור
   topic         String            // הנושא כפי שהוקלד ("בריאת העולם")
   topicKind     String            // meaning / mixed / empirical
-  status        String   @default("published") // published / refused / removed
+  status        String   @default("published") // pending / published / needs_review / refused / failed / removed
   refusalReason String?           // אם status=refused — הסיבה (לשנאה/אדם פרטי/נזק)
+  lastError     String?           // אם status=failed — השגיאה האחרונה
+
+  // job-row (PLAN 5.1): שורת pending היא המנעול והתור — unique slug = mutex.
+  generationStartedAt DateTime?   // לשחרור pending תקוע (timeout)
+  attemptCount        Int      @default(0)
   lenses        Lens[]
   reports       Report[]
   aliases       TopicAlias[]

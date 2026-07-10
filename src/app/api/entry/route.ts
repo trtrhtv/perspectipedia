@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
-import { getOrCreateEntry } from "@/lib/entryService";
+import { NextResponse, after } from "next/server";
+import { getOrCreateEntry, processPendingEntry } from "@/lib/entryService";
 import { MissingApiKeyError } from "@/lib/claude";
 
-// יצירת ערך יכולה לקחת זמן (adaptive thinking) — נותנים חלון רחב.
+// היצירה עצמה רצה ב-after() אחרי החזרת ה-202 — אבל חולקת את חלון הפונקציה.
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
@@ -33,10 +33,19 @@ export async function POST(request: Request) {
     switch (result.kind) {
       case "entry":
         return NextResponse.json({ entry: result.entry });
+      case "pending":
+        // מי שקנה את המנעול מריץ את העבודה — אחרי שהתגובה כבר יצאה ללקוח.
+        if (result.owned) {
+          const slug = result.slug;
+          after(() => processPendingEntry(slug));
+        }
+        return NextResponse.json({ pending: true, slug: result.slug }, { status: 202 });
       case "refused":
         return NextResponse.json({ refused: true, reason: result.reason });
       case "pending_review":
         return NextResponse.json({ pendingReview: true });
+      case "failed":
+        return NextResponse.json({ failed: true, slug: result.slug });
       case "removed":
         return NextResponse.json({ error: "הערך הוסר." }, { status: 404 });
       case "rate_limited":
