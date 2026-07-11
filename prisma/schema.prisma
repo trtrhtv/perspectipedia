@@ -74,7 +74,8 @@ model Lens {
   name          String            // "יהדות דתית"
   family        String            // religious / scientific / philosophical / political / cultural / historical
   summary       String            // תמצית 1-2 משפטים
-  body          String            // גוף הערך מהעדשה הזו
+  body          String            // גוף הערך מהעדשה הזו (בערכי v3 — שרשור הפרקים; תאימות + חיפוש)
+  sections      Json?             // [{ heading, content }] — ערך עמוק בפרקים (PLAN 4.5; נכתב מחוקה v3)
   grounding     Json              // [{ source, explanation, url? }] — "על מה זה מבוסס"
   epistemicType String            // meaning-narrative / value-position / empirical-grounded / methodological-critique
   confidence    String?           // סייג אופציונלי

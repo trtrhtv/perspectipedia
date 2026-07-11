@@ -24,11 +24,19 @@ export interface GroundingItem {
   url?: string;
 }
 
+// פרק בעדשה עמוקה (PLAN 4.5) — ב-v3 כל עדשה נכתבת בפרקים ("ערך-בתוך-ערך").
+export interface LensSection {
+  heading: string; // "מבוא", "זרמים ומחלוקות פנימיות"...
+  content: string;
+}
+
 export interface Lens {
   name: string;
   family: LensFamily;
   summary: string;
   body: string;
+  // קיים בערכי v3 (עומק ויקיפדי); בערכים ישנים undefined — הרנדרר נופל ל-body.
+  sections?: LensSection[];
   grounding: GroundingItem[];
   epistemicType: EpistemicType;
   confidence?: string;

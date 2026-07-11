@@ -1,79 +1,190 @@
-import type { Lens } from "@/lib/types";
+"use client";
+
+import { useState } from "react";
+import type { Lens, LensSection } from "@/lib/types";
 import {
   FAMILY_LABELS,
   EPISTEMIC_LABELS,
   EPISTEMIC_EXPLANATIONS,
   epistemicTint,
 } from "@/lib/types";
+import GroundingPanel from "./GroundingPanel";
 import ReportLink from "./ReportLink";
 
-export default function LensView({ lens, compact = false }: { lens: Lens; compact?: boolean }) {
+// כותרת עדשה — שם, משפחה, סטטוס אפיסטמי ותמצית. משמשת גם את ההשוואה הפרקית (4.6).
+export function LensHeader({ lens, compact = false }: { lens: Lens; compact?: boolean }) {
   return (
-    <article>
-      <header className="mb-3">
-        <div className="mb-1 flex flex-wrap items-center gap-2">
-          <h2 className={compact ? "text-xl font-bold" : "text-2xl font-bold"}>
-            {lens.name}
-          </h2>
-          <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-muted">
-            {FAMILY_LABELS[lens.family] ?? lens.family}
-          </span>
-          {/* הסטטוס האפיסטמי — רכיב בולט ומוסבר, לא מטא-דאטה (PLAN 4.1).
-              details/summary נגיש גם במגע ובמקלדת — לא רק tooltip לעכבר (PRE_KEY 2.2). */}
-          <details className="relative inline-block">
-            <summary
-              className={`cursor-pointer list-none rounded-full border px-2.5 py-0.5 text-xs font-medium marker:content-none ${epistemicTint(lens.epistemicType)}`}
-            >
-              {EPISTEMIC_LABELS[lens.epistemicType] ?? lens.epistemicType} ⓘ
-            </summary>
-            <p className="absolute z-10 mt-1 w-64 rounded-xl border border-line bg-white p-3 text-xs font-normal leading-relaxed text-ink shadow-lg">
-              {EPISTEMIC_EXPLANATIONS[lens.epistemicType]}
-            </p>
-          </details>
-        </div>
-        <p className="text-base leading-relaxed text-muted">{lens.summary}</p>
-      </header>
+    <header className="mb-3">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <h2 className={compact ? "text-xl font-bold" : "text-2xl font-bold"}>
+          {lens.name}
+        </h2>
+        <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-muted">
+          {FAMILY_LABELS[lens.family] ?? lens.family}
+        </span>
+        {/* הסטטוס האפיסטמי — רכיב בולט ומוסבר, לא מטא-דאטה (PLAN 4.1).
+            details/summary נגיש גם במגע ובמקלדת — לא רק tooltip לעכבר (PRE_KEY 2.2). */}
+        <details className="relative inline-block">
+          <summary
+            className={`cursor-pointer list-none rounded-full border px-2.5 py-0.5 text-xs font-medium marker:content-none ${epistemicTint(lens.epistemicType)}`}
+          >
+            {EPISTEMIC_LABELS[lens.epistemicType] ?? lens.epistemicType} ⓘ
+          </summary>
+          <p className="absolute z-10 mt-1 w-64 rounded-xl border border-line bg-white p-3 text-xs font-normal leading-relaxed text-ink shadow-lg">
+            {EPISTEMIC_EXPLANATIONS[lens.epistemicType]}
+          </p>
+        </details>
+      </div>
+      <p className="text-base leading-relaxed text-muted">{lens.summary}</p>
+    </header>
+  );
+}
 
-      <div className="prose-body text-[15px] leading-relaxed text-ink">
-        {lens.body.split(/\n{2,}|\n/).filter(Boolean).map((p, i) => (
-          <p key={i}>{p}</p>
-        ))}
+export function Paragraphs({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/\n{2,}|\n/).filter(Boolean).map((p, i) => (
+        <p key={i}>{p}</p>
+      ))}
+    </>
+  );
+}
+
+// כמה פרקים פתוחים כברירת מחדל במצב "תקציר" — המבוא בלבד (PRE_KEY א.4:
+// "תקציר/מלא" הוא פיצ'ר תצוגה; תמיד מייצרים ושומרים את המבנה המלא).
+const SUMMARY_OPEN_COUNT = 1;
+// תוכן-עניינים מוצג רק לעדשה עמוקה באמת.
+const TOC_MIN_SECTIONS = 4;
+
+function SectionedBody({
+  sections,
+  idPrefix,
+}: {
+  sections: LensSection[];
+  idPrefix: string;
+}) {
+  const [open, setOpen] = useState<boolean[]>(() =>
+    sections.map((_, i) => i < SUMMARY_OPEN_COUNT)
+  );
+  const allOpen = open.every(Boolean);
+
+  const setAll = (v: boolean) =>
+    setOpen(sections.map((_, i) => (v ? true : i < SUMMARY_OPEN_COUNT)));
+  const toggle = (i: number) =>
+    setOpen((prev) => prev.map((o, j) => (j === i ? !o : o)));
+  const openAndScroll = (i: number) => {
+    setOpen((prev) => prev.map((o, j) => (j === i ? true : o)));
+    // אחרי שהפרק נפתח — גלילה אליו (רץ אחרי ה-render הנוכחי).
+    requestAnimationFrame(() => {
+      document.getElementById(`${idPrefix}-sec-${i}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  };
+
+  return (
+    <div>
+      {/* בורר תקציר/מלא — פיצ'ר קריאה, לא יצירה (D7 מבחין ביניהם) */}
+      <div
+        className="mb-4 inline-flex rounded-full border border-line bg-white p-0.5 text-sm"
+        role="group"
+        aria-label="עומק תצוגה"
+      >
+        <button
+          onClick={() => setAll(false)}
+          aria-pressed={!allOpen}
+          className={
+            "rounded-full px-3.5 py-1 font-medium transition " +
+            (!allOpen ? "bg-accent text-white" : "text-muted hover:text-accent")
+          }
+        >
+          תקציר
+        </button>
+        <button
+          onClick={() => setAll(true)}
+          aria-pressed={allOpen}
+          className={
+            "rounded-full px-3.5 py-1 font-medium transition " +
+            (allOpen ? "bg-accent text-white" : "text-muted hover:text-accent")
+          }
+        >
+          מלא
+        </button>
       </div>
 
-      {/* חלונית "על מה זה מבוסס" — מבחן הביסוס בפעולה */}
-      <section className="mt-5 rounded-xl border border-line bg-white/60 p-4">
-        <div className="mb-2 flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-ink">על מה זה מבוסס</h3>
-        </div>
-        <ul className="space-y-2">
-          {lens.grounding.map((g, i) => (
-            <li key={i} className="text-sm leading-relaxed">
-              <span className="font-medium text-ink">{g.source}</span>
-              {/* מקור מקושר = שדרוג אמון; היעדר קישור לגיטימי — לעולם לא ניסוח מבטל (D1) */}
-              {g.url ? (
-                <a
-                  href={g.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mx-1.5 inline-block rounded-full border border-emerald-200 bg-emerald-50 px-2 py-px text-[11px] font-medium text-emerald-800 hover:bg-emerald-100"
+      {/* תוכן עניינים מקומי לעדשה (PLAN 4.5) */}
+      {sections.length >= TOC_MIN_SECTIONS && (
+        <nav
+          aria-label="פרקי העדשה"
+          className="mb-4 rounded-xl border border-line bg-white/60 p-3"
+        >
+          <p className="mb-1.5 text-xs font-semibold text-muted">בפרק זה</p>
+          <ol className="space-y-1">
+            {sections.map((s, i) => (
+              <li key={i}>
+                <button
+                  onClick={() => openAndScroll(i)}
+                  className="text-sm text-accent hover:underline"
                 >
-                  מקור מקושר ↗
-                </a>
-              ) : (
-                <span className="mx-1.5 inline-block rounded-full border border-line bg-stone-50 px-2 py-px text-[11px] text-muted">
-                  מקור מסורתי / כללי
+                  {s.heading}
+                </button>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
+
+      <div className="space-y-1">
+        {sections.map((s, i) => (
+          <section
+            key={i}
+            id={`${idPrefix}-sec-${i}`}
+            className="scroll-mt-4 border-b border-line/70 last:border-b-0"
+          >
+            <h3>
+              <button
+                onClick={() => toggle(i)}
+                aria-expanded={open[i]}
+                className="flex w-full items-center justify-between gap-2 py-2.5 text-start text-base font-semibold text-ink transition hover:text-accent"
+              >
+                <span>{s.heading}</span>
+                <span aria-hidden className="text-xs text-muted">
+                  {open[i] ? "▲" : "▼"}
                 </span>
-              )}
-              <span className="text-muted"> — {g.explanation}</span>
-            </li>
-          ))}
-        </ul>
-        {lens.confidence && (
-          <p className="mt-3 border-t border-line pt-2 text-xs italic text-muted">
-            {lens.confidence}
-          </p>
-        )}
-      </section>
+              </button>
+            </h3>
+            {open[i] && (
+              <div className="prose-body pb-4 text-[15px] leading-relaxed text-ink">
+                <Paragraphs text={s.content} />
+              </div>
+            )}
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function LensView({ lens, compact = false }: { lens: Lens; compact?: boolean }) {
+  const hasSections = !!lens.sections && lens.sections.length > 0;
+
+  return (
+    <article>
+      <LensHeader lens={lens} compact={compact} />
+
+      {hasSections ? (
+        // ערך עמוק (v3) — פרקים, תוכן-עניינים, תקציר/מלא (PLAN 4.5).
+        // key מאפס את מצב הקיפול במעבר עדשה.
+        <SectionedBody key={lens.name} sections={lens.sections!} idPrefix={`lens-${lens.name}`} />
+      ) : (
+        // תאימות לאחור — ערכי v2 עם body רציף.
+        <div className="prose-body text-[15px] leading-relaxed text-ink">
+          <Paragraphs text={lens.body} />
+        </div>
+      )}
+
+      <GroundingPanel grounding={lens.grounding} confidence={lens.confidence} />
 
       <ReportLink lensName={lens.name} />
     </article>
