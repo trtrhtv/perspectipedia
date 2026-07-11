@@ -20,9 +20,9 @@ export class MissingApiKeyError extends Error {
 }
 
 // המודל עצר עם stop_reason: refusal — סירוב ברמת ה-API (לא בשדה refused של הסכמה).
-// אין טעם ב-retry; ממופה לסירוב מכובד.
+// אין טעם ב-retry; ממופה לסירוב מכובד. נושא את ה-meta — גם סירוב עולה כסף אמיתי.
 class ModelRefusalError extends Error {
-  constructor() {
+  constructor(public meta?: GenerationMeta) {
     super("model refusal stop");
     this.name = "ModelRefusalError";
   }
@@ -58,9 +58,10 @@ export interface GenerationMeta {
 }
 
 // תוצאה מובחנת: או ערך תקין, או סירוב מכובד (נושא מחוץ לתחום).
+// meta קיים גם בסירוב — קריאת Opus שסירבה עולה כסף ונרשמת בחשבונאות.
 export type GenerationResult =
   | { refused: false; entry: Entry; meta: GenerationMeta }
-  | { refused: true; reason: string };
+  | { refused: true; reason: string; meta?: GenerationMeta };
 
 function getClient(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -167,7 +168,7 @@ async function callModel(
 
   // טיפול מפורש בכל stop reason חריג — אחרת נופלים לשגיאת parse מבלבלת.
   if (message.stop_reason === "refusal") {
-    throw new ModelRefusalError();
+    throw new ModelRefusalError(meta);
   }
   if (message.stop_reason === "max_tokens") {
     throw new Error("truncated: הפלט נקטע (max_tokens).");
@@ -227,26 +228,29 @@ export async function generateEntry(topic: string): Promise<GenerationResult> {
     try {
       const { raw, meta } = await callModel(topic);
 
-      // סירוב מכובד — נושא מחוץ לתחום המוצר.
+      // סירוב מכובד — נושא מחוץ לתחום המוצר. ה-meta נשמר (העלות שולמה).
       if (raw.refused) {
         return {
           refused: true,
           reason:
             raw.refusal_reason?.trim() ||
             "הנושא הזה מחוץ לתחום של perspectipedia.",
+          meta,
         };
       }
 
       let entry = rawToEntry(raw, topic);
 
       // מבקר הסימטריה האדוורסרי (flag-gated) + סבב תיקון אחד (PLAN 3.7):
-      // verdict שאינו pass → קריאת תיקון לפי ה-flags → ביקורת חוזרת →
-      // אם עדיין לא pass → needs_review (תור ה-admin).
+      // verdict שאינו pass → קריאת תיקון לפי ה-flags → ביקורת חוזרת.
+      // fail-closed: ערך שסומן פעם אחת לא מתפרסם בלי pass מפורש — אם הביקורת
+      // החוזרת נכשלת טכנית (null), הערך מוחזק ב-needs_review, לא משוחרר.
       if (isAuditEnabled()) {
-        let audit = await runAudit(entry);
-        if (audit && audit.verdict !== "pass") {
+        const firstAudit = await runAudit(entry);
+        if (firstAudit && firstAudit.verdict !== "pass") {
+          let finalAudit: AuditResult | null = null;
           try {
-            const revision = await callModel(topic, { previousRaw: raw, audit });
+            const revision = await callModel(topic, { previousRaw: raw, audit: firstAudit });
             const revisedEntry = rawToEntry(revision.raw, topic);
             // עלות מצטברת: היצירה + התיקון.
             meta.inputTokens = sum(meta.inputTokens, revision.meta.inputTokens);
@@ -254,17 +258,18 @@ export async function generateEntry(topic: string): Promise<GenerationResult> {
             meta.costUsd = sum(meta.costUsd, revision.meta.costUsd);
             meta.rawOutput = revision.meta.rawOutput;
             entry = revisedEntry;
-            audit = await runAudit(entry, { afterRevision: true });
+            finalAudit = await runAudit(entry, { afterRevision: true });
           } catch {
-            // תיקון שנכשל טכנית לא מפיל את הערך — נשאר עם המקור וסימון לבדיקה.
+            // תיקון שנכשל טכנית לא מפיל את הערך — נשאר עם המקור, מוחזק לבדיקה.
           }
-          if (audit && audit.verdict !== "pass") {
+          if (!finalAudit || finalAudit.verdict !== "pass") {
             meta.needsReview = true;
           }
-        }
-        if (audit) {
-          meta.auditVerdict = audit.verdict;
-          meta.auditJson = audit;
+          meta.auditVerdict = finalAudit?.verdict ?? "unverified";
+          meta.auditJson = finalAudit ?? firstAudit;
+        } else if (firstAudit) {
+          meta.auditVerdict = firstAudit.verdict;
+          meta.auditJson = firstAudit;
         }
       }
 
@@ -278,6 +283,7 @@ export async function generateEntry(topic: string): Promise<GenerationResult> {
         return {
           refused: true,
           reason: "המודל סירב לכתוב על הנושא הזה. ייתכן שהוא מחוץ לתחום של perspectipedia.",
+          meta: err.meta,
         };
       }
       if (attempt < MAX_ATTEMPTS) continue;

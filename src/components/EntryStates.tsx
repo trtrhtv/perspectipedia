@@ -45,6 +45,28 @@ export function RefusedState({ reason }: { reason: string }) {
   );
 }
 
+export function FailedState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="mt-10 rounded-2xl border border-amber-200 bg-amber-50 p-6">
+      <p className="font-medium text-amber-900">יצירת הערך נכשלה</p>
+      <p className="mt-1 text-sm text-amber-800">
+        משהו השתבש בדרך. אפשר לנסות שוב — לפעמים זה עניין רגעי.
+      </p>
+      <div className="mt-4 flex items-center gap-4">
+        <button
+          onClick={onRetry}
+          className="rounded-xl bg-accent px-5 py-2 font-medium text-white transition hover:bg-accent/90"
+        >
+          נסו שוב
+        </button>
+        <Link href="/" className="text-sm text-accent hover:underline">
+          ← חזרה לדף הבית
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export function ErrorState({ error }: { error: { message: string; code?: string } }) {
   // מצב read-only (PLAN 2.3): בלי מפתח, יצירה סגורה — מסר מוצרי, לא שגיאה טכנית.
   if (error.code === "no_api_key") {

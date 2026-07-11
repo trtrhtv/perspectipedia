@@ -1,9 +1,11 @@
+import { cache } from "react";
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { generateEntry, MissingApiKeyError } from "./claude";
 import { topicToSlug, normalizeTopic, heVariantSlug } from "./slug";
 import { limitCreate } from "./ratelimit";
 import { isGateEnabled, runGate } from "./gate";
+import { isMockLlmEnabled } from "./mockLlm";
 import type { Entry, Lens } from "./types";
 
 // מכסת יצירות יומית גלובלית — חוסמת abuse בנפח (ראו docs/ROADMAP.md §5).
@@ -50,7 +52,10 @@ export async function listEntries(): Promise<EntrySummary[]> {
 
 // שליפת ערך קיים מהמסד לפי slug — מחזיר גם ערכים שסורבו (כדי לא לייצר שוב).
 // משמש גם את דף הערך (SSR): הדף מציג כל מצב לפי ה-kind, בלי לייצר.
-export async function getEntryResultBySlug(slug: string): Promise<EntryResult | null> {
+// עטוף ב-React cache: generateMetadata וגוף הדף חולקים fetch אחד פר-בקשה.
+export const getEntryResultBySlug = cache(async function getEntryResultBySlugImpl(
+  slug: string
+): Promise<EntryResult | null> {
   const row = await prisma.entry.findUnique({
     where: { slug },
     include: { lenses: { orderBy: { order: "asc" } } },
@@ -75,6 +80,10 @@ export async function getEntryResultBySlug(slug: string): Promise<EntryResult | 
   if (row.status === "failed") {
     return { kind: "failed", slug: row.slug };
   }
+  // fail-closed: סטטוס עתידי שלא מופה כאן במפורש נשאר מוסתר — לא מוגש כערך מפורסם.
+  if (row.status !== "published") {
+    return { kind: "removed" };
+  }
   return {
     kind: "entry",
     entry: {
@@ -98,13 +107,7 @@ export async function getEntryResultBySlug(slug: string): Promise<EntryResult | 
       })),
     },
   };
-}
-
-// גרסה ציבורית — שליפה בלבד (ל-server rendering של ערך קיים).
-export async function getEntryBySlug(slug: string): Promise<Entry | null> {
-  const res = await getEntryResultBySlug(slug);
-  return res?.kind === "entry" ? res.entry : null;
-}
+});
 
 // ערבוב דטרמיניסטי פר-ערך (PRE_KEY 2.1): מיון אלפביתי הוא הטיה שיטתית כלל-אתרית —
 // אותה עדשה תמיד ראשונה בכל הערכים. ערבוב שנגזר מה-slug מפזר את יתרון-המיקום בין
@@ -176,7 +179,14 @@ function logGeneration(fields: Record<string, unknown>): void {
 async function countGenerationsToday(): Promise<number> {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
-  return prisma.entry.count({ where: { createdAt: { gte: start } } });
+  // המכסה מגינה על תקציב ה-Opus — סירובי-שער (Haiku, בלי טוקני Opus) לא נספרים,
+  // אחרת 100 נושאי-זבל זולים מקפיאים את היצירה לכולם (ממצא ביקורת).
+  return prisma.entry.count({
+    where: {
+      createdAt: { gte: start },
+      NOT: { status: "refused", outputTokens: null },
+    },
+  });
 }
 
 // לולאת הליבה (PLAN 5.1): נושא → cache → הגנות → job-row (מנעול) → 202.
@@ -241,7 +251,7 @@ export async function getOrCreateEntry(
 
   // 5. אין מפתח → 503 נקי לפני שנוצרת שורת pending שאין מי שיעבד אותה.
   // (במצב MOCK_LLM אין צורך במפתח — הצנרת רצה עם מודל-דמה.)
-  if (!process.env.ANTHROPIC_API_KEY?.trim() && process.env.MOCK_LLM !== "1") {
+  if (!process.env.ANTHROPIC_API_KEY?.trim() && !isMockLlmEnabled()) {
     throw new MissingApiKeyError();
   }
 
@@ -259,9 +269,14 @@ export async function getOrCreateEntry(
         attemptCount: 1,
       },
     });
-  } catch {
-    // מרוץ — מישהו אחר קנה את המנעול הרגע. הלקוח יעקוב ב-polling; העיבוד אצל הזוכה.
-    return { kind: "pending", slug, owned: false };
+  } catch (err) {
+    // רק התנגשות unique (P2002) היא מרוץ אמיתי — מישהו אחר קנה את המנעול.
+    // כל שגיאה אחרת (נפילת חיבור, pool) חייבת להתפוצץ — אחרת מחזירים 202
+    // על שורה שלא קיימת והלקוח יעשה polling לנצח (ממצא ביקורת).
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return { kind: "pending", slug, owned: false };
+    }
+    throw err;
   }
 
   return { kind: "pending", slug, owned: true };
@@ -311,29 +326,45 @@ async function tryReviveFailed(slug: string): Promise<boolean> {
 
 // ה-worker (seam ל-queue חיצוני, ARCHITECTURE_TARGET §7): מעבד שורת pending אחת.
 // היום נקרא מאותה בקשה שקנתה את המנעול (דרך after()); מחר — מ-cron/queue, בלי שינוי.
+//
+// כל מעברי המצב מותנים ב-status="pending" (updateMany עם guard): worker כפול
+// (adoption של שורה שנחשבה תקועה) או admin שהסיר את הערך תוך כדי יצירה —
+// לא דורסים תוצאה שכבר נקבעה (ממצא ביקורת).
 export async function processPendingEntry(slug: string): Promise<void> {
-  const row = await prisma.entry.findUnique({ where: { slug } });
-  if (!row || row.status !== "pending") return; // כבר טופל / נמחק
-
+  let result: Awaited<ReturnType<typeof generateEntry>> | null = null;
+  let attempt = 0;
   try {
-    const result = await generateEntry(row.topic);
+    const row = await prisma.entry.findUnique({ where: { slug } });
+    if (!row || row.status !== "pending") return; // כבר טופל / נמחק
+    attempt = row.attemptCount;
+
+    result = await generateEntry(row.topic);
 
     if (result.refused) {
-      await prisma.entry.update({
-        where: { slug },
-        data: { status: "refused", refusalReason: result.reason },
+      const updated = await prisma.entry.updateMany({
+        where: { slug, status: "pending" },
+        data: {
+          status: "refused",
+          refusalReason: result.reason,
+          // גם סירוב עלה כסף — נרשם לחשבונאות ול-post-mortem (ממצא ביקורת).
+          model: result.meta?.model,
+          promptVersion: result.meta?.promptVersion,
+          inputTokens: result.meta?.inputTokens,
+          outputTokens: result.meta?.outputTokens,
+          costUsd: result.meta?.costUsd,
+          rawOutput: result.meta?.rawOutput,
+        },
       });
-      logGeneration({ slug, finalStatus: "refused" });
+      logGeneration({ slug, finalStatus: "refused", costUsd: result.meta?.costUsd ?? null, skipped: updated.count === 0 });
       return;
     }
 
     const { entry, meta } = result;
     const finalStatus = meta.needsReview ? "needs_review" : "published";
-    // טרנזקציה: מחיקת עדשות ישנות (אם retry השאיר שאריות) + כתיבת החדשות.
-    await prisma.$transaction([
-      prisma.lens.deleteMany({ where: { entryId: row.id } }),
-      prisma.entry.update({
-        where: { slug },
+    // טרנזקציה אינטראקטיבית: קודם קניית המעבר (guard על pending), רק אז החלפת עדשות.
+    const persisted = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.entry.updateMany({
+        where: { slug, status: "pending" },
         data: {
           topic: entry.topic,
           topicKind: entry.topicKind,
@@ -348,22 +379,26 @@ export async function processPendingEntry(slug: string): Promise<void> {
           auditVerdict: meta.auditVerdict ?? null,
           auditJson: (meta.auditJson as Prisma.InputJsonValue) ?? Prisma.JsonNull,
           lastError: null,
-          lenses: {
-            create: entry.lenses.map((l, i) => ({
-              name: l.name,
-              family: l.family,
-              summary: l.summary,
-              body: l.body,
-              // Prisma Json input — מערך טיפוסי דורש המרה מפורשת
-              grounding: l.grounding as unknown as Prisma.InputJsonValue,
-              epistemicType: l.epistemicType,
-              confidence: l.confidence,
-              order: i,
-            })),
-          },
         },
-      }),
-    ]);
+      });
+      if (claimed.count === 0) return false; // המצב השתנה תחתינו — לא נוגעים
+      await tx.lens.deleteMany({ where: { entryId: row.id } });
+      await tx.lens.createMany({
+        data: entry.lenses.map((l, i) => ({
+          entryId: row.id,
+          name: l.name,
+          family: l.family,
+          summary: l.summary,
+          body: l.body,
+          // Prisma Json input — מערך טיפוסי דורש המרה מפורשת
+          grounding: l.grounding as unknown as Prisma.InputJsonValue,
+          epistemicType: l.epistemicType,
+          confidence: l.confidence,
+          order: i,
+        })),
+      });
+      return true;
+    });
     logGeneration({
       slug,
       model: meta.model,
@@ -373,14 +408,19 @@ export async function processPendingEntry(slug: string): Promise<void> {
       costUsd: meta.costUsd,
       durationMs: meta.durationMs,
       lensCount: entry.lenses.length,
-      attempt: row.attemptCount,
-      finalStatus,
+      attempt,
+      finalStatus: persisted ? finalStatus : "skipped_state_changed",
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "שגיאה לא מזוהה";
+    // שימור הפלט ששולם עליו גם בכשל persist — post-mortem בלי לשלם שוב.
+    const rawOutput = result && !result.refused ? result.meta.rawOutput : null;
     await prisma.entry
-      .update({ where: { slug }, data: { status: "failed", lastError: message } })
+      .updateMany({
+        where: { slug, status: "pending" },
+        data: { status: "failed", lastError: message, ...(rawOutput ? { rawOutput } : {}) },
+      })
       .catch(() => null);
-    logGeneration({ slug, finalStatus: "failed", error: message, attempt: row.attemptCount });
+    logGeneration({ slug, finalStatus: "failed", error: message, attempt });
   }
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Rubik } from "next/font/google";
+import { siteBaseUrl } from "@/lib/siteUrl";
 import "./globals.css";
 
 const hebrew = Rubik({
@@ -9,12 +10,7 @@ const hebrew = Rubik({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ??
-      (process.env.VERCEL_PROJECT_PRODUCTION_URL
-        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-        : "http://localhost:3000")
-  ),
+  metadataBase: new URL(siteBaseUrl()),
   title: "perspectipedia — אנציקלופדיה מרובת נקודות מבט",
   description:
     "קראו כל נושא דרך כמה עדשות מבוססות, בכבוד — והשוו ביניהן. לא 'מי צודק', אלא איך כל עולם מבין את זה ועל מה הוא מבסס.",

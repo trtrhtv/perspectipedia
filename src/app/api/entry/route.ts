@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { getOrCreateEntry, processPendingEntry } from "@/lib/entryService";
+import { getClientIp } from "@/lib/ratelimit";
 import { MissingApiKeyError } from "@/lib/claude";
 
 // היצירה עצמה רצה ב-after() אחרי החזרת ה-202 — אבל חולקת את חלון הפונקציה.
@@ -24,11 +25,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "הנושא ארוך מדי." }, { status: 400 });
   }
 
-  // IP לזיהוי rate limit — הערך הראשון ב-x-forwarded-for (מאחורי proxy כמו Vercel).
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown";
+  const ip = getClientIp(request);
 
   try {
     const result = await getOrCreateEntry(topic, { ip, depth });

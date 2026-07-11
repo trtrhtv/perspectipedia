@@ -4,6 +4,8 @@
 // נרמול תצוגה: ניקוד, גרשיים עבריים, רווחים כפולים (PLAN 1.5א).
 export function normalizeTopic(topic: string): string {
   return topic
+    .replace(/־/g, "-") // מקף עברי (U+05BE) → מקף רגיל — לפני מחיקת הניקוד שבולעת אותו
+    .replace(/[׀׃׆]/g, " ") // פסק, סוף-פסוק, נו"ן הפוכה → מפריד
     .replace(/[֑-ׇ]/g, "") // ניקוד וטעמים
     .replace(/[׳״]/g, "") // גרש וגרשיים עבריים (צה״ל → צהל)
     .replace(/\s+/g, " ") // רווחים כפולים/טאבים
@@ -27,7 +29,14 @@ export function heVariantSlug(slug: string): string | null {
   return null;
 }
 
-// שחזור טקסט קריא מ-slug (כשאין את הנושא המקורי)
+// שחזור טקסט קריא מ-slug (כשאין את הנושא המקורי).
+// ה-decode סלחני: הקלט לרוב כבר מפוענח, ו-'%' גולמי (למשל "100% צדק") אסור שיפיל את הדף.
 export function slugToTopic(slug: string): string {
-  return decodeURIComponent(slug).replace(/-/g, " ").trim();
+  let decoded = slug;
+  try {
+    decoded = decodeURIComponent(slug);
+  } catch {
+    // אחוז גולמי / קידוד שבור — משתמשים בקלט כמות שהוא
+  }
+  return decoded.replace(/-/g, " ").trim();
 }

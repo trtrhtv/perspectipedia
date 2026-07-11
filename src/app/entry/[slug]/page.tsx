@@ -2,18 +2,27 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getEntryResultBySlug, resolveExistingSlug } from "@/lib/entryService";
-import { slugToTopic } from "@/lib/slug";
+import { slugToTopic, topicToSlug, normalizeTopic } from "@/lib/slug";
 import EntryDisplay from "@/components/EntryDisplay";
 import CreateEntryFlow from "@/components/CreateEntryFlow";
 import { PendingReviewState, RefusedState } from "@/components/EntryStates";
 
 // דף הערך הוא server component: קורא מה-DB בלבד ולעולם לא מייצר (PLAN 0.2).
-// הכותרת המוצגת מגיעה תמיד מה-DB (Entry.topic) או נגזרת מה-slug — אין ערוץ ?q= (PLAN 0.3).
+// הכותרת של ערך קיים מגיעה תמיד מה-DB. לנושא שטרם נוצר, ?q= משמש רק לשימור
+// הניסוח המדויק שהוקלד (צה"ל ולא צהל) — ורק אם הוא מנרמל בדיוק לאותו slug,
+// כך שאי אפשר להציג כותרת שרירותית (הפתרון לממצא ה-fidelity בלי להחזיר את וקטור ה-spoof).
 
-type Params = { params: Promise<{ slug: string }> };
+type Params = { params: Promise<{ slug: string }>; searchParams: Promise<{ q?: string }> };
 
-export async function generateMetadata({ params }: Params): Promise<Metadata> {
+function typedTopicIfValid(q: string | undefined, slug: string): string | null {
+  if (!q) return null;
+  const clean = normalizeTopic(q);
+  return topicToSlug(clean) === slug ? clean : null;
+}
+
+export async function generateMetadata({ params, searchParams }: Params): Promise<Metadata> {
   const { slug: raw } = await params;
+  const { q } = await searchParams;
   const slug = decodeURIComponent(raw);
   const result = await getEntryResultBySlug(slug);
 
@@ -21,7 +30,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   // בלי noindex קרולרים יאנדקסו אינסוף כתובות (PRE_KEY 1.1).
   if (result?.kind !== "entry") {
     return {
-      title: `${slugToTopic(slug)} — perspectipedia`,
+      title: `${typedTopicIfValid(q, slug) ?? slugToTopic(slug)} — perspectipedia`,
       robots: { index: false, follow: false },
     };
   }
@@ -42,8 +51,9 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   };
 }
 
-export default async function EntryPage({ params }: Params) {
+export default async function EntryPage({ params, searchParams }: Params) {
   const { slug: raw } = await params;
+  const { q } = await searchParams;
   const slug = decodeURIComponent(raw);
   const result = await getEntryResultBySlug(slug);
 
@@ -57,7 +67,11 @@ export default async function EntryPage({ params }: Params) {
 
   if (result?.kind === "removed") notFound();
 
-  const topic = result?.kind === "entry" ? result.entry.topic : slugToTopic(slug);
+  // ערך קיים: הכותרת מה-DB. חדש: הניסוח המוקלד (אם עבר ולידציה) או שחזור מה-slug.
+  const topic =
+    result?.kind === "entry"
+      ? result.entry.topic
+      : (typedTopicIfValid(q, slug) ?? slugToTopic(slug));
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">

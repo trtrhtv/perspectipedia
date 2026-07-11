@@ -69,8 +69,8 @@ export async function runAudit(
   opts: { afterRevision?: boolean } = {}
 ): Promise<AuditResult | null> {
   // מצב דמה (PRE_KEY 3.1) — בדיקת צנרת הביקורת בלי API.
-  if (process.env.MOCK_LLM === "1") {
-    const { buildMockAudit } = await import("./mockLlm");
+  const { isMockLlmEnabled, buildMockAudit } = await import("./mockLlm");
+  if (isMockLlmEnabled()) {
     return buildMockAudit(entry.topic, !!opts.afterRevision);
   }
 

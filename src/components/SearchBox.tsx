@@ -12,7 +12,9 @@ export default function SearchBox({ autoFocus = false }: { autoFocus?: boolean }
     const t = topic.trim();
     if (!t) return;
     const slug = topicToSlug(t);
-    router.push(`/entry/${encodeURIComponent(slug)}`);
+    // ?q= משמר את הניסוח המדויק (צה"ל) ליצירה; הדף מקבל אותו רק אם הוא
+    // מנרמל בדיוק ל-slug הזה — כותרת שרירותית לא תוצג.
+    router.push(`/entry/${encodeURIComponent(slug)}?q=${encodeURIComponent(t)}`);
   }
 
   return (

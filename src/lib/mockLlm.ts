@@ -12,7 +12,9 @@
 import type { AuditResult } from "./audit";
 
 export function isMockLlmEnabled(): boolean {
-  return process.env.MOCK_LLM === "1";
+  // מחסום פרודקשן קשיח: גם אם MOCK_LLM=1 דולף ל-env של Vercel production,
+  // ערכי-דמה לעולם לא ייווצרו באתר החי.
+  return process.env.MOCK_LLM === "1" && process.env.VERCEL_ENV !== "production";
 }
 
 export interface MockRawLens {

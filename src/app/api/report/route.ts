@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { limitReport } from "@/lib/ratelimit";
+import { limitReport, getClientIp } from "@/lib/ratelimit";
 
 // דיווח קורא על בעיה/הטיה (PLAN 1.4). rate-limited; נשמר לתור ה-admin.
 
+// תקרת דיווחים פתוחים פר-ערך — בולם הצפת DB ותור ניהול גם מעבר ל-rate limit.
+const MAX_OPEN_REPORTS_PER_ENTRY = 25;
+
 export async function POST(request: Request) {
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown";
+  const ip = getClientIp(request);
 
   const rl = await limitReport(ip);
   if (!rl.allowed) {
@@ -38,6 +38,16 @@ export async function POST(request: Request) {
 
   const entry = await prisma.entry.findUnique({ where: { slug }, select: { id: true } });
   if (!entry) return NextResponse.json({ error: "ערך לא נמצא." }, { status: 404 });
+
+  const openCount = await prisma.report.count({
+    where: { entryId: entry.id, status: "open" },
+  });
+  if (openCount >= MAX_OPEN_REPORTS_PER_ENTRY) {
+    return NextResponse.json(
+      { error: "הערך הזה כבר בבדיקה בעקבות דיווחים קודמים. תודה!" },
+      { status: 429 }
+    );
+  }
 
   await prisma.report.create({
     data: { entryId: entry.id, lensName, reason },

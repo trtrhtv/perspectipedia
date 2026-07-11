@@ -89,3 +89,13 @@ export function limitReport(ip: string): Promise<RateLimitResult> {
   if (REPORTS_PER_HOUR <= 0) return Promise.resolve({ allowed: true }); // 0 = כבוי
   return reportLimiterInstance.limit(ip);
 }
+
+// חילוץ IP אחיד לכל ה-routes — מקום אחד לעדכן כשטופולוגיית ה-proxy משתנה.
+// x-forwarded-for אמין רק מאחורי proxy שמשכתב אותו (Vercel כן; self-hosted — היזהרו).
+export function getClientIp(request: Request): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown"
+  );
+}

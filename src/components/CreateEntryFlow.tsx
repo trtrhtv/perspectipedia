@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Entry } from "@/lib/types";
 import EntryDisplay from "./EntryDisplay";
-import { ErrorState, LoadingState, PendingReviewState, RefusedState } from "./EntryStates";
+import {
+  ErrorState,
+  FailedState,
+  LoadingState,
+  PendingReviewState,
+  RefusedState,
+} from "./EntryStates";
 
 type Status =
   | "idle"
@@ -16,6 +22,8 @@ type Status =
   | "error";
 
 const POLL_INTERVAL_MS = 2500;
+const MAX_POLL_MS = 10 * 60 * 1000; // תקרה — אחריה מציגים failed עם retry במקום spinner נצחי
+const MAX_NOT_FOUND = 3; // ‏404 עקבי = השורה לא קיימת (נמחקה או שהיצירה לא התחילה)
 
 // זרימת יצירת ערך (PLAN 5.1): POST מפורש → 202 → polling על GET /api/entry/[slug].
 // עמיד ל-refresh ולריבוי טאבים: השרת מחזיק את המצב בשורת ה-Entry, לא הלקוח.
@@ -35,16 +43,39 @@ export default function CreateEntryFlow({
   const [refusalReason, setRefusalReason] = useState("");
   // בחירת עומק (D7): נשמרת עם הבקשה; נאכפת ביצירה מחוקה v3.
   const [depth, setDepth] = useState<"summary" | "standard">("standard");
-  const stopped = useRef(false);
+  // token פר-לולאה: לולאה ישנה מתה ברגע שנפתחת חדשה (או ב-unmount) — בלי דגל משותף
+  // שנדרס ב-StrictMode/remount ומשאיר שתי לולאות חיות במקביל (ממצא ביקורת).
+  const pollToken = useRef(0);
 
-  const poll = useCallback(async () => {
-    while (!stopped.current) {
+  const poll = useCallback(async (targetSlug: string) => {
+    const token = ++pollToken.current;
+    const startedAt = Date.now();
+    let notFound = 0;
+
+    while (pollToken.current === token) {
+      if (Date.now() - startedAt > MAX_POLL_MS) {
+        setStatus("failed");
+        return;
+      }
       try {
-        const res = await fetch(`/api/entry/${encodeURIComponent(slug)}`);
-        if (res.ok) {
+        const res = await fetch(`/api/entry/${encodeURIComponent(targetSlug)}`);
+        if (pollToken.current !== token) return;
+        if (res.status === 404) {
+          // השורה לא קיימת — נמחקה ע"י admin או שהיצירה מעולם לא נרשמה.
+          if (++notFound >= MAX_NOT_FOUND) {
+            setError({ message: "הערך לא נמצא — ייתכן שהוסר. נסו לחפש שוב מדף הבית." });
+            setStatus("error");
+            return;
+          }
+        } else if (res.ok) {
+          notFound = 0;
           const data = await res.json();
-          if (stopped.current) return;
+          if (pollToken.current !== token) return;
           if (data.status === "ready") {
+            // הכתובת בשורת הדפדפן מתעדכנת ל-slug הקנוני (שיתוף/רענון תקינים).
+            if (targetSlug !== slug) {
+              window.history.replaceState(null, "", `/entry/${encodeURIComponent(targetSlug)}`);
+            }
             setEntry(data.entry as Entry);
             setStatus("ready");
             return;
@@ -65,19 +96,18 @@ export default function CreateEntryFlow({
           // pending → ממשיכים לחכות
         }
       } catch {
-        // שגיאת רשת רגעית — ממשיכים לנסות
+        // שגיאת רשת רגעית — ממשיכים לנסות (עד תקרת הזמן)
       }
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     }
   }, [slug]);
 
   useEffect(() => {
-    stopped.current = false;
-    if (initialStatus === "creating") void poll();
+    if (initialStatus === "creating") void poll(slug);
     return () => {
-      stopped.current = true;
+      pollToken.current++; // ביטול כל לולאה חיה של המופע הזה
     };
-  }, [initialStatus, poll]);
+  }, [initialStatus, poll, slug]);
 
   async function create() {
     setStatus("creating");
@@ -108,8 +138,9 @@ export default function CreateEntryFlow({
         setStatus("ready");
         return;
       }
-      // pending (202) או failed שהוחיה — עוברים ל-polling.
-      void poll();
+      // pending (202) או failed שהוחיה — polling על ה-slug הקנוני שהשרת החזיר:
+      // נושא מנורמל (צה"ל→צהל) נשמר תחת slug שונה מזה שבכתובת (ממצא ביקורת).
+      void poll(typeof data.slug === "string" && data.slug ? data.slug : slug);
     } catch {
       setError({ message: "החיבור נכשל. נסו שוב." });
       setStatus("error");
@@ -121,27 +152,7 @@ export default function CreateEntryFlow({
   if (status === "refused") return <RefusedState reason={refusalReason} />;
   if (status === "pending_review") return <PendingReviewState />;
   if (status === "error" && error) return <ErrorState error={error} />;
-  if (status === "failed") {
-    return (
-      <div className="mt-10 rounded-2xl border border-amber-200 bg-amber-50 p-6">
-        <p className="font-medium text-amber-900">יצירת הערך נכשלה</p>
-        <p className="mt-1 text-sm text-amber-800">
-          משהו השתבש בדרך. אפשר לנסות שוב — לפעמים זה עניין רגעי.
-        </p>
-        <div className="mt-4 flex items-center gap-4">
-          <button
-            onClick={create}
-            className="rounded-xl bg-accent px-5 py-2 font-medium text-white transition hover:bg-accent/90"
-          >
-            נסו שוב
-          </button>
-          <Link href="/" className="text-sm text-accent hover:underline">
-            ← חזרה לדף הבית
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  if (status === "failed") return <FailedState onRetry={create} />;
 
   return (
     <div className="mt-10 rounded-2xl border border-line bg-white p-6">

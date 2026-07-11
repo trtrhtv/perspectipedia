@@ -1,15 +1,12 @@
 import type { MetadataRoute } from "next";
 import { listEntries } from "@/lib/entryService";
+import { siteBaseUrl } from "@/lib/siteUrl";
 
 // sitemap דינמי (PRE_KEY 1.2) — רק ערכים מפורסמים + דפי הקבע.
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base =
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : "http://localhost:3000");
+  const base = siteBaseUrl();
 
   const entries = await listEntries();
   return [
