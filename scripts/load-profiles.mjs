@@ -8,6 +8,16 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 const dir = new URL("../profiles", import.meta.url).pathname;
 
+// השוואה יציבה: jsonb של Postgres ממיין מפתחות, אז stringify רגיל תמיד "שונה".
+function stable(value) {
+  if (Array.isArray(value)) return value.map(stable);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((k) => [k, stable(value[k])]));
+  }
+  return value;
+}
+const fingerprint = (obj) => JSON.stringify(stable(obj));
+
 const files = (await readdir(dir)).filter((f) => f.endsWith(".json"));
 for (const file of files) {
   const p = JSON.parse(await readFile(path.join(dir, file), "utf8"));
@@ -30,7 +40,7 @@ for (const file of files) {
     continue;
   }
 
-  const changed = JSON.stringify(data) !== JSON.stringify({
+  const changed = fingerprint(data) !== fingerprint({
     locale: existing.locale, name: existing.name, family: existing.family, role: existing.role,
     canon: existing.canon, register: existing.register, internalDebates: existing.internalDebates,
     voice: existing.voice, redFlags: existing.redFlags,
