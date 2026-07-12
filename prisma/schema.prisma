@@ -44,6 +44,29 @@ model Entry {
   @@index([createdAt])
 }
 
+// פרופיל עדשה — "ספריית העולמות" (D10, PLAN 4.11): תפקיד מוגדר + הגות אצורה + קול קבוע
+// לכל עולם-תוכן. היצירה (מ-v3.5) מפעילה פרופיל, לא ממציאה עדשה. חתימת אינסיינדר
+// ברמת הפרופיל — אישור אחד משפר את כל הערכים העתידיים.
+model LensProfile {
+  id             String   @id @default(cuid())
+  key            String   @unique          // "haredi-litai", "scientific-mainstream"...
+  locale         String   @default("he")
+  name           String                     // שם תצוגה: "יהדות חרדית-ליטאית"
+  family         String                     // religious/scientific/philosophical/political/cultural/historical
+  role           String                     // הדמות: מי כותב, לאיזה קהל, מאיזו עמדה
+  canon          Json                       // [{source, why, weight}] — כפי שהעולם עצמו מדרג
+  register       String                     // איך העולם נשמע: ביטויים, סגנון, מה נחשב טיעון טוב
+  internalDebates Json                      // [string] — מחלוקות פנימיות שאסור לשטח
+  voice          String   @default("first-person") // first-person / faithful-description (D1.4)
+  redFlags       Json                       // [string] — מה מסגיר זיוף ("נשמע כמו תרגום מאנגלית כש...")
+  status         String   @default("draft") // draft / insider_approved / deprecated
+  version        Int      @default(1)
+  approvedBy     String?                    // תיאור האינסיינדר המאשר (לא PII מלא)
+  approvedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 // ניסוח חלופי של נושא שמנתב לערך קיים (PLAN 1.5) — מונע כפילויות ("שואה"/"השואה").
 model TopicAlias {
   id        String   @id @default(cuid())
