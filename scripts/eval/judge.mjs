@@ -37,12 +37,15 @@ function countMatches(text, terms) {
 function lexiconPass(entry) {
   const perLens = entry.lenses.map((l) => {
     const text = `${l.summary} ${l.body}`;
+    // עדשת הבנה-מבפנים *מחויבת* בשפת תיאור-אמונה ("רבים מאמינים ש...") לפי D1.1/D1.4 —
+    // ספירתה כ"שפה מחלישה" הייתה מאלפת את המודל להשמיט טענות (ממצא ביקורת-הפאנל).
+    const isPhenomenological = l.epistemic_type === "phenomenological";
     return {
       lens: l.name,
-      weakening: countMatches(text, WEAKENING_VERBS),
+      weakening: isPhenomenological ? 0 : countMatches(text, WEAKENING_VERBS),
       strength: countMatches(text, STRENGTH_VERBS),
       dismissive: countMatches(text, DISMISSIVE),
-      hedges: countMatches(text, HEDGES),
+      hedges: isPhenomenological ? 0 : countMatches(text, HEDGES),
       chars: text.length,
     };
   });

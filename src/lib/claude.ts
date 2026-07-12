@@ -270,6 +270,11 @@ export async function generateEntry(topic: string): Promise<GenerationResult> {
         } else if (firstAudit) {
           meta.auditVerdict = firstAudit.verdict;
           meta.auditJson = firstAudit;
+        } else {
+          // fail-closed (ממצא ביקורת-הפאנל): המבקר מופעל אך נכשל טכנית — הערך לא
+          // מתפרסם "לא-מבוקר בשקט" בזמן שדף השיטה מבטיח שכל ערך נבדק. מוחזק לסקירה.
+          meta.needsReview = true;
+          meta.auditVerdict = "unaudited";
         }
       }
 
