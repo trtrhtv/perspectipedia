@@ -101,6 +101,7 @@ export const getEntryResultBySlug = cache(async function getEntryResultBySlugImp
         family: l.family as Lens["family"],
         summary: l.summary,
         body: l.body,
+        sections: (l.sections as unknown as Lens["sections"]) ?? undefined,
         grounding: l.grounding as unknown as Lens["grounding"],
         epistemicType: l.epistemicType as Lens["epistemicType"],
         confidence: l.confidence ?? undefined,
