@@ -104,5 +104,11 @@ model Lens {
   order         Int               // סדר תצוגה
   editedByHuman Boolean @default(false) // תשתית לצעד ההיברידי (v2)
 
+  // קישור לפרופיל שהזריק את העדשה (D10 pilot) — כך שאישור/עדכון פרופיל
+  // יודע לאתר אילו עדשות קיימות נוצרו ממנו ולסמן אותן ל-regenerate.
+  profileKey     String?
+  profileVersion Int?
+
   @@index([entryId])
+  @@index([profileKey])
 }
