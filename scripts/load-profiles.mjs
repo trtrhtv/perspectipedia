@@ -26,11 +26,14 @@ for (const file of files) {
     name: p.name,
     family: p.family,
     role: p.role,
+    scope: p.scope ?? null,
     canon: p.canon,
     register: p.register,
+    lexicon: p.lexicon ?? null,
     internalDebates: p.internalDebates,
     voice: p.voice ?? "first-person",
     redFlags: p.redFlags,
+    exemplars: p.exemplars ?? null,
   };
 
   const existing = await prisma.lensProfile.findUnique({ where: { key: p.key } });
@@ -42,8 +45,9 @@ for (const file of files) {
 
   const changed = fingerprint(data) !== fingerprint({
     locale: existing.locale, name: existing.name, family: existing.family, role: existing.role,
-    canon: existing.canon, register: existing.register, internalDebates: existing.internalDebates,
-    voice: existing.voice, redFlags: existing.redFlags,
+    scope: existing.scope, canon: existing.canon, register: existing.register, lexicon: existing.lexicon,
+    internalDebates: existing.internalDebates, voice: existing.voice, redFlags: existing.redFlags,
+    exemplars: existing.exemplars,
   });
   if (!changed) {
     console.log(`ok       ${p.key} v${existing.version} (ללא שינוי)`);

@@ -54,11 +54,14 @@ model LensProfile {
   name           String                     // שם תצוגה: "יהדות חרדית-ליטאית"
   family         String                     // religious/scientific/philosophical/political/cultural/historical
   role           String                     // הדמות: מי כותב, לאיזה קהל, מאיזו עמדה
+  scope          String?                    // גבול-ייצוג מפורש: מה כן ומה לא מכוסה תחת הפרופיל הזה
   canon          Json                       // [{source, why, weight}] — כפי שהעולם עצמו מדרג
   register       String                     // איך העולם נשמע: ביטויים, סגנון, מה נחשב טיעון טוב
+  lexicon        Json?                      // [{term, meaning}] — מונחי-מפתח ומשמעותם המדויקת בעולם הזה
   internalDebates Json                      // [string] — מחלוקות פנימיות שאסור לשטח
   voice          String   @default("first-person") // first-person / faithful-description (D1.4)
   redFlags       Json                       // [string] — מה מסגיר זיוף ("נשמע כמו תרגום מאנגלית כש...")
+  exemplars      Json?                      // [{topic, text, note}] — קטעים שעברו בפועל אודיט-סימטריה
   status         String   @default("draft") // draft / insider_approved / deprecated
   version        Int      @default(1)
   approvedBy     String?                    // תיאור האינסיינדר המאשר (לא PII מלא)
